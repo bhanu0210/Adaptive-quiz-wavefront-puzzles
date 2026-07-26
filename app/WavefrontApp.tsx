@@ -189,14 +189,14 @@ export default function WavefrontApp() {
       return;
     }
     setAuthCodeSent(true);
-    setAuthMessage("A six-digit code has been sent. Enter it below to sign in.");
+    setAuthMessage("A sign-in code has been sent. Enter it below to sign in.");
   };
 
   const verifySignInCode = async () => {
     const email = authEmail.trim();
     const code = authCode.trim();
-    if (!/^[0-9]{6}$/.test(code)) {
-      setAuthMessage("Enter the six-digit code from your email.");
+    if (!/^[0-9]{6,10}$/.test(code)) {
+      setAuthMessage("Enter the code from your email.");
       return;
     }
     if (!supabase) {
@@ -546,8 +546,8 @@ export default function WavefrontApp() {
             <h2 id="auth-title">Keep your progress moving.</h2>
             <p>Use your email to save your puzzle path, ratings, and membership.</p>
             <label>Email address<input type="email" value={authEmail} onChange={(event) => { setAuthEmail(event.target.value); setAuthCodeSent(false); setAuthCode(""); }} placeholder="you@example.com" autoComplete="email" /></label>
-            {authCodeSent && <label>Six-digit code<input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} value={authCode} onChange={(event) => setAuthCode(event.target.value.replace(/\D/g, ""))} placeholder="123456" autoComplete="one-time-code" /></label>}
-            <button className="checkout-button" onClick={() => void (authCodeSent ? verifySignInCode() : sendSignInCode())} disabled={authSending}>{authSending ? "Please wait..." : authCodeSent ? "Verify and sign in" : "Email me a six-digit code"}</button>
+            {authCodeSent && <label>Sign-in code<input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={10} value={authCode} onChange={(event) => setAuthCode(event.target.value.replace(/\D/g, ""))} placeholder="Enter code" autoComplete="one-time-code" /></label>}
+            <button className="checkout-button" onClick={() => void (authCodeSent ? verifySignInCode() : sendSignInCode())} disabled={authSending}>{authSending ? "Please wait..." : authCodeSent ? "Verify and sign in" : "Email me a sign-in code"}</button>
             {authCodeSent && <button className="auth-secondary-action" onClick={() => void sendSignInCode()} disabled={authSending}>Send a new code</button>}
             {authMessage && <div className="auth-notice" role="status">{authMessage}</div>}
             <small>No password to remember. Your account is created securely on first sign-in.</small>
