@@ -1,0 +1,266 @@
+[
+  {
+    "id": "signal-silence-hats",
+    "title": "The Answer Hidden in Silence",
+    "category": "Logic & Knowledge",
+    "difficulty": 3,
+    "time": 5,
+    "question": "Three thinkers stand in a line. Ava sees Ben and Cy. Ben sees Cy. Cy sees nobody. There are three black hats and two white hats available, and each person wears one. Ava says, \"I do not know my hat colour.\" Ben hears this and says, \"I do not know either.\" Cy then says, \"Now I know.\" What colour is Cy's hat?",
+    "options": ["Black", "White", "It could be either", "There is not enough information"],
+    "correctOption": 0,
+    "hints": [
+      "Treat each \"I do not know\" as new information, not as an empty statement.",
+      "If Ava had seen two white hats, she would have known immediately that hers was black.",
+      "After Ava speaks, Ben knows at least one of his and Cy's hats is black. If Cy's were white, Ben would know his own was black. Ben does not know, so Cy must be black."
+    ],
+    "explanation": "Cy's hat is black. Ava would know her own hat was black if she saw two white hats, so her uncertainty tells everyone that Ben and Cy are not both white. Ben now knows at least one of those two hats is black. If Ben could see a white hat on Cy, Ben would know that his own hat had to be black. But Ben still does not know. That means Cy cannot be wearing white, so Cy is wearing black.",
+    "takeaway": "Silence can eliminate possibilities. In knowledge puzzles, write down what each person would have known in every possible case.",
+    "verification": {
+      "method": "Exhaustive hat-assignment enumeration",
+      "reviewed": true,
+      "version": 1
+    }
+  },
+  {
+    "id": "cheryls-calendar",
+    "title": "A Birthday Between the Lines",
+    "category": "Logic & Knowledge",
+    "difficulty": 4,
+    "time": 7,
+    "question": "Mira's birthday is one of these dates: May 15, May 16, May 19, June 17, June 18, July 14, July 16, August 14, August 15, or August 17. Arun is told only the month and Bela only the day. Arun says, \"I do not know, but I know Bela does not know.\" Bela says, \"Now I know.\" Arun says, \"Now I know too.\" When is Mira's birthday?",
+    "options": ["July 16", "August 15", "August 17", "July 14"],
+    "correctOption": 0,
+    "hints": [
+      "Begin with days that occur only once in the full list.",
+      "Arun's first statement rules out every month containing a day that would let Bela know immediately.",
+      "May and June disappear first. Bela's certainty then removes day 14. Arun could not choose between two August dates, so the month must be July."
+    ],
+    "explanation": "The birthday is July 16. Bela would instantly know the date if she heard 18 or 19, because those days appear only once. Arun knows Bela cannot know, so Arun cannot have heard May or June, the months containing those unique days. We are left with July 14, July 16, August 14, August 15, and August 17. Bela now knows, so her day cannot be 14. That leaves July 16, August 15, and August 17. Arun now knows too. If he had heard August, two dates would remain, so he must have heard July. The only remaining July date is July 16.",
+    "takeaway": "Start epistemic puzzles by removing values that would create instant knowledge, then repeat the filtering after every statement.",
+    "verification": {
+      "method": "Programmatic public-announcement filtering",
+      "reviewed": true,
+      "version": 1
+    }
+  },
+  {
+    "id": "potato-water",
+    "title": "The Potatoes That Lost Half",
+    "category": "Mathematical Reasoning",
+    "difficulty": 2,
+    "time": 3,
+    "question": "A 100 kg pile of potatoes is 99% water. After drying, it is 98% water. The amount of solid potato does not change. What does the pile weigh now?",
+    "options": ["50 kg", "98 kg", "99 kg", "49 kg"],
+    "correctOption": 0,
+    "hints": [
+      "Track the part that does not change instead of the water that leaves.",
+      "At the start, the non-water part is 1% of 100 kg.",
+      "The solid part is 1 kg. After drying it is 2% of the total, so total weight is 1 divided by 0.02."
+    ],
+    "explanation": "The pile now weighs 50 kg. At first, 99 kg is water and only 1 kg is solid potato. Drying removes water but leaves that 1 kg of solid material unchanged. When the potatoes are 98% water, they are 2% solid. If 2% of the new total equals 1 kg, then the new total is 1 divided by 0.02, which is 50 kg. The surprising drop happens because the water percentage is measured against a changing total.",
+    "takeaway": "In percentage-change puzzles, identify a quantity that stays fixed and build the equation around it.",
+    "verification": {
+      "method": "Mass-conservation equation",
+      "reviewed": true,
+      "version": 1
+    }
+  },
+  {
+    "id": "hundred-lockers",
+    "title": "The Hundred Locker Parade",
+    "category": "Mathematical Reasoning",
+    "difficulty": 3,
+    "time": 5,
+    "question": "There are 100 closed lockers. On pass 1, every locker is toggled. On pass 2, every second locker is toggled. On pass 3, every third locker is toggled, and so on through pass 100. How many lockers are open at the end?",
+    "options": ["10", "50", "9", "25"],
+    "correctOption": 0,
+    "hints": [
+      "A locker changes once for each number that divides its locker number.",
+      "Most factors come in pairs, such as 2 and 6 for 12.",
+      "Only perfect squares have an odd number of factors. The open lockers are 1, 4, 9, and so on through 100."
+    ],
+    "explanation": "Exactly 10 lockers remain open. Locker 12, for example, is toggled on passes 1, 2, 3, 4, 6, and 12. Its factors pair up, so it is toggled an even number of times and ends closed. A perfect square is different because one factor pair repeats in the middle: for 36, the pair 6 times 6 uses the same factor twice. Perfect squares therefore have an odd number of factors and end open. From 1 squared through 10 squared, there are 10 perfect squares no larger than 100.",
+    "takeaway": "When an action happens once per divisor, factor parity often turns the problem into a perfect-square test.",
+    "verification": {
+      "method": "Direct 100-pass toggle simulation",
+      "reviewed": true,
+      "version": 1
+    }
+  },
+  {
+    "id": "monty-switch",
+    "title": "The Door You Should Leave",
+    "category": "Probability & Strategy",
+    "difficulty": 2,
+    "time": 4,
+    "question": "A prize is hidden behind one of three doors. You choose Door 1. A host who knows the answer always opens a different door containing no prize, then offers you the remaining closed door. Which strategy gives the best chance of winning?",
+    "options": ["Switch; the chance is 2/3", "Stay; the chance is 2/3", "Either; both are 1/2", "Switch only if Door 3 was opened"],
+    "correctOption": 0,
+    "hints": [
+      "Keep your original probability unchanged after the host acts.",
+      "Your first door was right only one time out of three.",
+      "Your first choice loses two times out of three. In both losing cases, the host is forced to leave the prize door closed, so switching wins."
+    ],
+    "explanation": "You should switch, giving a 2 out of 3 chance of winning. Your first choice has only a 1 out of 3 chance of being correct. The other two doors together therefore carry a 2 out of 3 chance. The host does not open a random door: the host deliberately reveals an empty one. That action transfers the full 2 out of 3 chance of the two-door group onto the single unopened alternative. Staying wins only when your first guess was right; switching wins whenever your first guess was wrong.",
+    "takeaway": "Ask whether revealed information was random or deliberately selected. A knowledgeable host changes what the reveal means.",
+    "verification": {
+      "method": "Exact three-case outcome enumeration",
+      "reviewed": true,
+      "version": 1
+    }
+  },
+  {
+    "id": "birthday-collision",
+    "title": "A Crowded Birthday Room",
+    "category": "Probability & Strategy",
+    "difficulty": 3,
+    "time": 5,
+    "question": "Ignoring leap years and assuming birthdays are evenly distributed, which group size first makes it more likely than not that at least two people share a birthday?",
+    "options": ["23 people", "50 people", "183 people", "366 people"],
+    "correctOption": 0,
+    "hints": [
+      "It is easier to calculate the opposite event: everyone has a different birthday.",
+      "For 23 people, multiply 365/365 by 364/365, then 363/365, continuing for all 23 people.",
+      "With 22 people the collision chance is about 47.6%. With 23 it rises to about 50.7%, crossing the halfway mark."
+    ],
+    "explanation": "The answer is 23 people. We calculate the chance that all birthdays are different and subtract it from 1. The first person can have any birthday. The second must avoid one used day, the third must avoid two used days, and so on. For 23 people, the all-different probability is about 49.3%, so the chance of at least one shared birthday is about 50.7%. With only 22 people, the shared-birthday chance is still about 47.6%, so 23 is the first group size above 50%.",
+    "takeaway": "For an 'at least one' probability, calculate the chance of none happening and subtract from 1.",
+    "verification": {
+      "method": "High-precision complement probability calculation",
+      "reviewed": true,
+      "version": 1
+    }
+  },
+  {
+    "id": "bridge-torch",
+    "title": "Seventeen Minutes Across",
+    "category": "Algorithms & Optimization",
+    "difficulty": 3,
+    "time": 6,
+    "question": "Four people take 1, 2, 5, and 10 minutes to cross a bridge. At most two can cross at once, they need one torch, and a pair moves at the slower person's speed. What is the shortest time for everyone to cross?",
+    "options": ["17 minutes", "19 minutes", "21 minutes", "15 minutes"],
+    "correctOption": 0,
+    "hints": [
+      "The fastest person does not always need to escort every slower person.",
+      "Try using the two fastest people as a shuttle team.",
+      "Send 1 and 2 across, 1 returns, 5 and 10 cross, 2 returns, then 1 and 2 cross again."
+    ],
+    "explanation": "The minimum is 17 minutes. First, the 1-minute and 2-minute people cross together, costing 2 minutes. The 1-minute person returns, making 3. The 5-minute and 10-minute people cross together, making 13. The 2-minute person returns, making 15. Finally, the 1-minute and 2-minute people cross again, making 17. Sending the fastest person separately with each slow person costs more. An exhaustive search of every legal crossing sequence confirms that no plan finishes in less than 17 minutes.",
+    "takeaway": "Optimization problems often improve when expensive items are grouped together and cheap helpers handle the returns.",
+    "verification": {
+      "method": "Dijkstra search across every legal bridge state",
+      "reviewed": true,
+      "version": 1
+    }
+  },
+  {
+    "id": "twenty-five-horses",
+    "title": "Seven Races, No Stopwatch",
+    "category": "Algorithms & Optimization",
+    "difficulty": 4,
+    "time": 8,
+    "question": "You have 25 horses, a five-lane track, and no stopwatch. A race tells you only the order of its five runners. What is the minimum number of races needed to guarantee finding the three fastest horses in order?",
+    "options": ["7 races", "6 races", "8 races", "10 races"],
+    "correctOption": 0,
+    "hints": [
+      "First create five internally ordered groups.",
+      "After racing the five group winners, eliminate every horse that already has at least three known horses ahead of it.",
+      "Five group races plus one winners' race identify the fastest horse and leave five candidates for second and third. Race those five once more."
+    ],
+    "explanation": "Seven races are necessary and sufficient. Race five groups of five, using five races. Race the five group winners in race six. Suppose the winners finish A1, B1, C1, D1, E1. A1 is fastest overall. Every horse in groups D and E is eliminated, as are horses too far down the other groups. Only A2, A3, B1, B2, and C1 can still be second or third. Race those five in race seven; the first two finishers are second and third overall. Six races cannot settle the remaining comparisons, so seven is the minimum.",
+    "takeaway": "Use known comparisons as a graph. Remove any candidate that already has enough proven predecessors to miss the target rank.",
+    "verification": {
+      "method": "Comparison-graph elimination and lower-bound review",
+      "reviewed": true,
+      "version": 1
+    }
+  },
+  {
+    "id": "mutilated-board",
+    "title": "Two Missing Corners",
+    "category": "Spatial Reasoning",
+    "difficulty": 3,
+    "time": 5,
+    "question": "Remove two opposite corner squares from a standard 8 by 8 chessboard. Can the remaining 62 squares be covered exactly by 31 dominoes, each covering two edge-touching squares?",
+    "options": ["No, it is impossible", "Yes, in exactly one way", "Yes, in many ways", "Only if the centre squares are covered first"],
+    "correctOption": 0,
+    "hints": [
+      "Focus on a property every domino must have, regardless of where it is placed.",
+      "Every edge-touching pair contains one black square and one white square.",
+      "Opposite corners have the same colour. Removing both leaves 30 squares of one colour and 32 of the other, but 31 dominoes would cover 31 of each."
+    ],
+    "explanation": "It is impossible. Colour the board like a normal chessboard. Every domino placed on two edge-touching squares must cover exactly one black square and one white square. Opposite corners of an 8 by 8 board have the same colour. Removing them leaves 30 squares of that colour and 32 of the other colour. But 31 dominoes would always cover 31 black and 31 white squares. Because the colour counts do not match what dominoes require, no arrangement can cover the board.",
+    "takeaway": "Look for an invariant: a property every legal move preserves even when the exact arrangement is hard to imagine.",
+    "verification": {
+      "method": "Checkerboard colour invariant",
+      "reviewed": true,
+      "version": 1
+    }
+  },
+  {
+    "id": "painted-cube",
+    "title": "Edges of a Painted Cube",
+    "category": "Spatial Reasoning",
+    "difficulty": 2,
+    "time": 4,
+    "question": "A large cube is painted on all six outside faces, then cut into 27 equal small cubes in a 3 by 3 by 3 grid. How many small cubes have exactly two painted faces?",
+    "options": ["12", "8", "6", "18"],
+    "correctOption": 0,
+    "hints": [
+      "Classify small cubes as corners, edge pieces, face centres, and the hidden centre.",
+      "A cube with exactly two painted faces sits on an edge but not at a corner.",
+      "The large cube has 12 edges. In a 3 by 3 by 3 cube, each edge has exactly one non-corner small cube."
+    ],
+    "explanation": "There are 12 small cubes with exactly two painted faces. Such a cube must sit along an edge of the large cube, because two outside faces meet at each edge. Corner cubes have three painted faces, so we do not count them. A 3 by 3 by 3 cube has one middle cube on each edge between its two corners. Since a cube has 12 edges and each edge contributes one qualifying small cube, the total is 12.",
+    "takeaway": "For painted-cube problems, sort pieces by location: corners have three painted faces, edges two, face interiors one, and internal cubes zero.",
+    "verification": {
+      "method": "Coordinate enumeration of all 27 small cubes",
+      "reviewed": true,
+      "version": 1
+    }
+  },
+  {
+    "id": "reverse-1089",
+    "title": "The 1089 Machine",
+    "category": "Patterns & Numbers",
+    "difficulty": 2,
+    "time": 3,
+    "question": "Start with 532. Reverse it to get 235 and subtract the smaller from the larger. Reverse that result and add the two results together. What number do you get?",
+    "options": ["1089", "999", "792", "1188"],
+    "correctOption": 0,
+    "hints": [
+      "Keep leading zeroes if they appear in similar versions of this trick.",
+      "First calculate 532 minus 235.",
+      "532 minus 235 is 297. Reverse 297 to get 792, then add 297 and 792."
+    ],
+    "explanation": "The result is 1089. First subtract the reversed number: 532 minus 235 equals 297. Reverse 297 to get 792. Finally, add 297 and 792, which equals 1089. This works for many three-digit starting numbers when the first and last digits differ by at least two. Algebra shows that the subtraction creates a structured multiple of 99, and reversing then adding completes the 1089 pattern.",
+    "takeaway": "When a digit trick seems magical, write the number using place values such as 100a + 10b + c and simplify.",
+    "verification": {
+      "method": "Direct arithmetic and place-value identity",
+      "reviewed": true,
+      "version": 1
+    }
+  },
+  {
+    "id": "look-and-say",
+    "title": "Read What You See",
+    "category": "Patterns & Numbers",
+    "difficulty": 2,
+    "time": 3,
+    "question": "What comes next in this sequence: 1, 11, 21, 1211, 111221, ...?",
+    "options": ["312211", "1113213211", "122111", "311221"],
+    "correctOption": 0,
+    "hints": [
+      "The terms describe something rather than following ordinary arithmetic.",
+      "Read each term aloud in groups of repeated digits.",
+      "111221 contains three 1s, two 2s, and one 1. Write those counts and digits in order."
+    ],
+    "explanation": "The next term is 312211. Each line describes the groups in the line before it. The term 111221 contains a group of three 1s, followed by a group of two 2s, followed by one 1. Writing those descriptions as digits gives 31, then 22, then 11. Put them together and you get 312211. This is called the look-and-say sequence because you look at one term and say what you see.",
+    "takeaway": "Before searching for arithmetic, test whether a sequence describes the previous term's structure, grouping, or spelling.",
+    "verification": {
+      "method": "Run-length encoding transformation",
+      "reviewed": true,
+      "version": 1
+    }
+  }
+]
