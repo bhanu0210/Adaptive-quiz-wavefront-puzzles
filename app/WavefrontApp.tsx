@@ -6,8 +6,20 @@ import puzzlesData from "./data/puzzles.json";
 import { supabase } from "./supabase";
 
 type Puzzle = (typeof puzzlesData)[number];
-type View = "solve" | "paths" | "leaderboard" | "community";
+type View = "solve" | "paths" | "leaderboard" | "community" | "admin";
 type AccessPass = "monthly" | "annual";
+type AdminPuzzle = {
+  id: string;
+  title: string;
+  path: string;
+  difficulty: number;
+  expected_minutes: number;
+  access_level: string;
+  publication_status: string;
+  payload: Record<string, unknown>;
+  updated_at: string;
+};
+type AdminMember = { user_id: string; display_name: string; created_at: string; subscription?: { status: string; current_period_end: string | null } };
 
 const accessPasses: Record<AccessPass, { name: string; price: string; duration: string; description: string }> = {
   monthly: { name: "30-Day Pass", price: "₹99", duration: "30 days", description: "Full access for one month" },
@@ -92,6 +104,12 @@ export default function WavefrontApp() {
   const [authCodeSent, setAuthCodeSent] = useState(false);
   const [authMessage, setAuthMessage] = useState("");
   const [authSending, setAuthSending] = useState(false);
+  const [adminPuzzles, setAdminPuzzles] = useState<AdminPuzzle[]>([]);
+  const [adminMembers, setAdminMembers] = useState<AdminMember[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminSelectedId, setAdminSelectedId] = useState<string | null>(null);
+  const [adminPayloadText, setAdminPayloadText] = useState("");
+  const [adminNotice, setAdminNotice] = useState("");
 
   useEffect(() => {
     if (!supabase) {
@@ -127,6 +145,52 @@ export default function WavefrontApp() {
     });
   }, [authUser]);
 
+  const isAdmin = authUser?.email?.toLowerCase() === "cbaforcat2017@gmail.com";
+
+  const loadAdminData = async () => {
+    if (!supabase || !isAdmin) return;
+    setAdminLoading(true);
+    const [catalogResult, profilesResult, subscriptionsResult] = await Promise.all([
+      supabase.from("puzzle_catalog").select("id,title,path,difficulty,expected_minutes,access_level,publication_status,payload,updated_at").order("updated_at", { ascending: false }),
+      supabase.from("puzzle_profiles").select("user_id,display_name,created_at").order("created_at", { ascending: false }),
+      supabase.from("puzzle_subscriptions").select("user_id,status,current_period_end"),
+    ]);
+    if (catalogResult.data) setAdminPuzzles(catalogResult.data as AdminPuzzle[]);
+    if (profilesResult.data) {
+      const subscriptions = new Map((subscriptionsResult.data ?? []).map((row) => [row.user_id, { status: row.status, current_period_end: row.current_period_end }]));
+      setAdminMembers(profilesResult.data.map((profile) => ({ ...profile, subscription: subscriptions.get(profile.user_id) })));
+    }
+    setAdminLoading(false);
+  };
+
+  useEffect(() => { void loadAdminData(); }, [authUser?.id]);
+
+  const selectAdminPuzzle = (puzzle: AdminPuzzle) => {
+    setAdminSelectedId(puzzle.id);
+    setAdminPayloadText(JSON.stringify(puzzle.payload ?? {}, null, 2));
+    setAdminNotice("");
+  };
+
+  const saveAdminPayload = async () => {
+    if (!supabase || !adminSelectedId) return;
+    try {
+      const payload = JSON.parse(adminPayloadText) as Record<string, unknown>;
+      const { error } = await supabase.from("puzzle_catalog").update({ payload }).eq("id", adminSelectedId);
+      if (error) throw error;
+      setAdminNotice("Puzzle content draft saved.");
+      await loadAdminData();
+    } catch {
+      setAdminNotice("Use valid JSON before saving this content draft.");
+    }
+  };
+
+  const setAdminPublication = async (puzzle: AdminPuzzle, publication_status: "draft" | "published") => {
+    if (!supabase) return;
+    const { error } = await supabase.from("puzzle_catalog").update({ publication_status, published_at: publication_status === "published" ? new Date().toISOString() : null }).eq("id", puzzle.id);
+    setAdminNotice(error ? "The publication status could not be updated." : `${puzzle.title} is now ${publication_status}.`);
+    if (!error) await loadAdminData();
+  };
+
   const recommendedPuzzle = useMemo(() => {
     const unsolved = puzzlesData.filter((puzzle) => !solvedIds.includes(puzzle.id));
     return unsolved.sort((a, b) => (mastery[a.category] ?? 50) - (mastery[b.category] ?? 50))[0] ?? puzzlesData[0];
@@ -159,6 +223,7 @@ export default function WavefrontApp() {
     { id: "paths", label: "Paths", glyph: "02" },
     { id: "leaderboard", label: "Leaderboard", glyph: "03" },
     { id: "community", label: "Community", glyph: "04" },
+    ...(isAdmin ? [{ id: "admin" as View, label: "Admin", glyph: "05" }] : []),
   ];
 
   const changeView = (next: View) => {
@@ -565,6 +630,43 @@ export default function WavefrontApp() {
                 </div>
               ))}
             </div>
+          </section>
+        ) : view === "admin" ? (
+          <section className="admin-view">
+            <div className="page-heading split">
+              <div><span className="eyebrow">Owner console</span><h1>Publishing control</h1><p>Review puzzle content, release status, and member access from one place.</p></div>
+              <button className="text-action" onClick={() => void loadAdminData()} disabled={adminLoading}>{adminLoading ? "Refreshing..." : "Refresh data"}</button>
+            </div>
+            <div className="admin-stats">
+              <div><strong>{adminPuzzles.length}</strong><span>catalog puzzles</span></div>
+              <div><strong>{adminPuzzles.filter((puzzle) => puzzle.publication_status === "published").length}</strong><span>published</span></div>
+              <div><strong>{adminMembers.filter((member) => member.subscription?.status === "active").length}</strong><span>active passes</span></div>
+            </div>
+            <div className="admin-grid">
+              <section className="admin-panel">
+                <div className="admin-panel-heading"><div><span className="eyebrow">Puzzle catalog</span><h2>Edit and publish</h2></div><span>{adminPuzzles.length} records</span></div>
+                <div className="admin-list">
+                  {adminPuzzles.map((puzzle) => (
+                    <button className={adminSelectedId === puzzle.id ? "admin-row selected" : "admin-row"} key={puzzle.id} onClick={() => selectAdminPuzzle(puzzle)}>
+                      <span><strong>{puzzle.title}</strong><small>{puzzle.path.replaceAll("-", " ")} · difficulty {puzzle.difficulty}</small></span>
+                      <em className={puzzle.publication_status === "published" ? "status-live" : "status-draft"}>{puzzle.publication_status}</em>
+                    </button>
+                  ))}
+                </div>
+              </section>
+              <section className="admin-panel editor-panel">
+                <div className="admin-panel-heading"><div><span className="eyebrow">Content editor</span><h2>{adminSelectedId ? adminPuzzles.find((puzzle) => puzzle.id === adminSelectedId)?.title : "Select a puzzle"}</h2></div></div>
+                {adminSelectedId ? <>
+                  <label className="admin-editor-label">Structured content payload<textarea value={adminPayloadText} onChange={(event) => setAdminPayloadText(event.target.value)} spellCheck={false} /></label>
+                  <div className="admin-actions"><button className="primary-action small" onClick={() => void saveAdminPayload()}>Save draft</button>{(() => { const puzzle = adminPuzzles.find((item) => item.id === adminSelectedId); return puzzle ? <button className="text-action" onClick={() => void setAdminPublication(puzzle, puzzle.publication_status === "published" ? "draft" : "published")}>{puzzle.publication_status === "published" ? "Move to draft" : "Publish"}</button> : null; })()}</div>
+                </> : <p className="admin-empty">Choose a catalog record to review its structured content and publication state.</p>}
+                {adminNotice && <p className="admin-notice">{adminNotice}</p>}
+              </section>
+            </div>
+            <section className="admin-panel member-panel">
+              <div className="admin-panel-heading"><div><span className="eyebrow">Subscribers</span><h2>Access overview</h2></div><span>{adminMembers.length} signed-in members</span></div>
+              <div className="member-table"><div className="member-head"><span>Member</span><span>Joined</span><span>Access</span><span>Pass ends</span></div>{adminMembers.map((member) => <div className="member-row" key={member.user_id}><span><strong>{member.display_name}</strong><small>{member.user_id.slice(0, 8)}</small></span><span>{new Date(member.created_at).toLocaleDateString("en-IN")}</span><span>{member.subscription?.status ?? "inactive"}</span><span>{member.subscription?.current_period_end ? new Date(member.subscription.current_period_end).toLocaleDateString("en-IN") : "-"}</span></div>)}</div>
+            </section>
           </section>
         ) : (
           <section className="standard-view">
