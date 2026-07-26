@@ -291,7 +291,13 @@ export default function WavefrontApp() {
         });
         setCheckoutLoading(false);
         if (verificationError) {
-          setCheckoutNotice(verificationError.message);
+          let detail: { error?: string } | undefined;
+          try {
+            detail = await (verificationError as { context?: { json?: () => Promise<{ error?: string }> } }).context?.json?.();
+          } catch {
+            detail = undefined;
+          }
+          setCheckoutNotice(detail?.error ?? verificationError.message);
           return;
         }
         setAccessUntil(verificationData?.currentPeriodEnd ?? null);
