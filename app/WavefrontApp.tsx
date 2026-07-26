@@ -110,6 +110,7 @@ export default function WavefrontApp() {
   const [adminSelectedId, setAdminSelectedId] = useState<string | null>(null);
   const [adminPayloadText, setAdminPayloadText] = useState("");
   const [adminNotice, setAdminNotice] = useState("");
+  const [contentOverrides, setContentOverrides] = useState<Record<string, Partial<Puzzle>>>({});
 
   useEffect(() => {
     if (!supabase) {
@@ -144,6 +145,16 @@ export default function WavefrontApp() {
       setAccessUntil(data?.status === "active" ? data.current_period_end : null);
     });
   }, [authUser]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    void supabase.from("puzzle_catalog").select("id,payload").eq("publication_status", "published").then(({ data }) => {
+      if (!data) return;
+      setContentOverrides(Object.fromEntries(data.map((record) => [record.id, (record.payload ?? {}) as Partial<Puzzle>])));
+    });
+  }, []);
+
+  const livePuzzles = useMemo(() => puzzlesData.map((puzzle) => ({ ...puzzle, ...(contentOverrides[puzzle.id] ?? {}) })), [contentOverrides]);
 
   const isAdmin = authUser?.email?.toLowerCase() === "cbaforcat2017@gmail.com";
 
@@ -192,9 +203,9 @@ export default function WavefrontApp() {
   };
 
   const recommendedPuzzle = useMemo(() => {
-    const unsolved = puzzlesData.filter((puzzle) => !solvedIds.includes(puzzle.id));
-    return unsolved.sort((a, b) => (mastery[a.category] ?? 50) - (mastery[b.category] ?? 50))[0] ?? puzzlesData[0];
-  }, [mastery, solvedIds]);
+    const unsolved = livePuzzles.filter((puzzle) => !solvedIds.includes(puzzle.id));
+    return unsolved.sort((a, b) => (mastery[a.category] ?? 50) - (mastery[b.category] ?? 50))[0] ?? livePuzzles[0];
+  }, [livePuzzles, mastery, solvedIds]);
 
   const startPuzzle = (puzzle: Puzzle) => {
     setActivePuzzle(puzzle);
@@ -450,7 +461,7 @@ export default function WavefrontApp() {
                 <div className="puzzle-meta">
                   <span>{activePuzzle.category}</span><i /><span>{difficultyLabel(activePuzzle.difficulty)}</span><i /><span>{activePuzzle.time} min</span>
                 </div>
-                <div className="puzzle-number">Verified challenge {String(puzzlesData.indexOf(activePuzzle) + 1).padStart(2, "0")}</div>
+                <div className="puzzle-number">Verified challenge {String(livePuzzles.indexOf(activePuzzle) + 1).padStart(2, "0")}</div>
                 <h1>{activePuzzle.title}</h1>
                 <p className="question-copy">{activePuzzle.question}</p>
                 <div className="answer-list">
@@ -547,7 +558,7 @@ export default function WavefrontApp() {
             </div>
             <div className="path-grid">
               {categories.map((category) => {
-                const categoryPuzzles = puzzlesData.filter((puzzle) => puzzle.category === category.name);
+                const categoryPuzzles = livePuzzles.filter((puzzle) => puzzle.category === category.name);
                 const next = categoryPuzzles.find((puzzle) => !solvedIds.includes(puzzle.id)) ?? categoryPuzzles[0];
                 return (
                   <button className={`path-card ${category.color}`} key={category.name} onClick={() => startPuzzle(next)}>
@@ -585,7 +596,7 @@ export default function WavefrontApp() {
             <div className="page-heading"><span className="eyebrow">Your curriculum</span><h1>Adaptive paths</h1><p>Each result reshapes what comes next.</p></div>
             <div className="path-list">
               {categories.map((category, categoryIndex) => {
-                const categoryPuzzles = puzzlesData.filter((puzzle) => puzzle.category === category.name);
+                const categoryPuzzles = livePuzzles.filter((puzzle) => puzzle.category === category.name);
                 return (
                   <section className="path-row" key={category.name}>
                     <div className={`path-code large ${category.color}`}>{category.code}</div>
