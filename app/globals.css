@@ -1505,6 +1505,36 @@ select:focus-visible {
   border-bottom: 1px solid var(--line);
 }
 
+.pass-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.pass-option {
+  display: grid;
+  gap: 5px;
+  min-height: 118px;
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: white;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pass-option.selected {
+  border-color: var(--blue);
+  box-shadow: inset 0 0 0 1px var(--blue);
+  background: var(--blue-soft);
+}
+
+.pass-option strong { font-size: 12px; }
+.pass-option b { font-size: 22px; }
+.pass-option span { color: var(--ink-soft); font-size: 10px; line-height: 1.35; }
+
 .price strong {
   font-size: 42px;
 }

@@ -7,6 +7,12 @@ import { supabase } from "./supabase";
 
 type Puzzle = (typeof puzzlesData)[number];
 type View = "solve" | "paths" | "leaderboard" | "community";
+type AccessPass = "monthly" | "annual";
+
+const accessPasses: Record<AccessPass, { name: string; price: string; duration: string; description: string }> = {
+  monthly: { name: "30-Day Pass", price: "₹99", duration: "30 days", description: "Full access for one month" },
+  annual: { name: "Annual Pass", price: "₹799", duration: "365 days", description: "Best value for a full year" },
+};
 
 const categories = [
   { name: "Logic & Knowledge", code: "LK", color: "coral", mastery: 64 },
@@ -70,7 +76,9 @@ export default function WavefrontApp() {
     Object.fromEntries(categories.map((category) => [category.name, category.mastery])),
   );
   const [showSubscribe, setShowSubscribe] = useState(false);
-  const [checkoutNotice, setCheckoutNotice] = useState(false);
+  const [selectedPass, setSelectedPass] = useState<AccessPass>("monthly");
+  const [checkoutNotice, setCheckoutNotice] = useState("");
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [rating, setRating] = useState<number | null>(null);
   const [posts, setPosts] = useState(seedPosts);
   const [showPostForm, setShowPostForm] = useState(false);
@@ -214,6 +222,68 @@ export default function WavefrontApp() {
     }
     setAuthMessage("Signed in. Your puzzle progress will now be saved.");
     setShowAuth(false);
+  };
+
+  const loadRazorpayCheckout = () => new Promise<boolean>((resolve) => {
+    if ((window as Window & { Razorpay?: unknown }).Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
+
+  const beginCheckout = async () => {
+    if (!authUser) {
+      setShowSubscribe(false);
+      setAuthMessage("Sign in first so we can attach your pass to your account.");
+      setShowAuth(true);
+      return;
+    }
+    if (!supabase) {
+      setCheckoutNotice("Payments are being activated. Please try again shortly.");
+      return;
+    }
+
+    setCheckoutLoading(true);
+    setCheckoutNotice("");
+    const { data, error } = await supabase.functions.invoke("create-puzzle-order", { body: { pass: selectedPass } });
+    if (error || !data) {
+      setCheckoutLoading(false);
+      setCheckoutNotice(error?.message ?? "We could not start checkout. Please try again.");
+      return;
+    }
+
+    const ready = await loadRazorpayCheckout();
+    if (!ready) {
+      setCheckoutLoading(false);
+      setCheckoutNotice("Razorpay checkout could not load. Check your connection and try again.");
+      return;
+    }
+
+    type RazorpayCheckout = new (options: Record<string, unknown>) => { open: () => void };
+    const Razorpay = (window as Window & { Razorpay: RazorpayCheckout }).Razorpay;
+    const checkout = new Razorpay({
+      key: data.keyId,
+      amount: data.amount,
+      currency: data.currency,
+      name: "Wavefront Puzzles",
+      description: data.description,
+      order_id: data.orderId,
+      theme: { color: "#165dff" },
+      handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
+        const { error: verificationError } = await supabase.functions.invoke("verify-puzzle-payment", {
+          body: { ...response, pass: selectedPass },
+        });
+        setCheckoutLoading(false);
+        setCheckoutNotice(verificationError ? verificationError.message : `${accessPasses[selectedPass].name} activated. Enjoy the puzzles.`);
+      },
+      modal: { ondismiss: () => setCheckoutLoading(false) },
+    });
+    checkout.open();
   };
 
   const signOut = async () => {
@@ -515,12 +585,11 @@ export default function WavefrontApp() {
           <section className="subscribe-modal" role="dialog" aria-modal="true" aria-labelledby="subscribe-title" onMouseDown={(event) => event.stopPropagation()}>
             <button className="modal-close" aria-label="Close" onClick={() => setShowSubscribe(false)}>×</button>
             <AppMark /><span className="eyebrow">Wavefront Pass</span><h2 id="subscribe-title">Keep your mind in motion.</h2>
-            <div className="price"><strong>₹99</strong><span>/ month</span></div>
+            <div className="pass-options">{(Object.keys(accessPasses) as AccessPass[]).map((pass) => <button key={pass} className={`pass-option ${selectedPass === pass ? "selected" : ""}`} onClick={() => { setSelectedPass(pass); setCheckoutNotice(""); }}><strong>{accessPasses[pass].name}</strong><b>{accessPasses[pass].price}</b><span>{accessPasses[pass].description}</span></button>)}</div>
             <div className="membership-lines"><span>All adaptive paths</span><span>Fortnightly puzzle drops</span><span>Community rankings</span></div>
-            {checkoutNotice ? <p className="checkout-notice">Secure checkout will open when the payment account is activated.</p> : (
-              <button className="checkout-button" onClick={() => setCheckoutNotice(true)}>Continue to payment <span aria-hidden="true">→</span></button>
-            )}
-            <small>Cancel anytime · No hidden charges</small>
+            <button className="checkout-button" onClick={() => void beginCheckout()} disabled={checkoutLoading}>{checkoutLoading ? "Opening secure checkout..." : `Get ${accessPasses[selectedPass].duration} access`} <span aria-hidden="true">→</span></button>
+            {checkoutNotice && <p className="checkout-notice">{checkoutNotice}</p>}
+            <small>One-time payment · No automatic renewal</small>
           </section>
         </div>
       )}
