@@ -1535,6 +1535,20 @@ select:focus-visible {
 .pass-option b { font-size: 22px; }
 .pass-option span { color: var(--ink-soft); font-size: 10px; line-height: 1.35; }
 
+.access-active {
+  display: grid;
+  gap: 7px;
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid #37a879;
+  border-radius: 6px;
+  background: #e9f8f0;
+  color: #0d5538;
+}
+
+.access-active strong { font-size: 15px; }
+.access-active span { font-size: 12px; }
+
 .price strong {
   font-size: 42px;
 }

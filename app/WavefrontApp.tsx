@@ -79,6 +79,7 @@ export default function WavefrontApp() {
   const [selectedPass, setSelectedPass] = useState<AccessPass>("monthly");
   const [checkoutNotice, setCheckoutNotice] = useState("");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [accessUntil, setAccessUntil] = useState<string | null>(null);
   const [rating, setRating] = useState<number | null>(null);
   const [posts, setPosts] = useState(seedPosts);
   const [showPostForm, setShowPostForm] = useState(false);
@@ -115,6 +116,16 @@ export default function WavefrontApp() {
       listener.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!supabase || !authUser) {
+      setAccessUntil(null);
+      return;
+    }
+    void supabase.from("puzzle_subscriptions").select("current_period_end, status").eq("user_id", authUser.id).maybeSingle().then(({ data }) => {
+      setAccessUntil(data?.status === "active" ? data.current_period_end : null);
+    });
+  }, [authUser]);
 
   const recommendedPuzzle = useMemo(() => {
     const unsolved = puzzlesData.filter((puzzle) => !solvedIds.includes(puzzle.id));
@@ -275,11 +286,16 @@ export default function WavefrontApp() {
       order_id: data.orderId,
       theme: { color: "#165dff" },
       handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
-        const { error: verificationError } = await supabase.functions.invoke("verify-puzzle-payment", {
+        const { data: verificationData, error: verificationError } = await supabase.functions.invoke("verify-puzzle-payment", {
           body: { ...response, pass: selectedPass },
         });
         setCheckoutLoading(false);
-        setCheckoutNotice(verificationError ? verificationError.message : `${accessPasses[selectedPass].name} activated. Enjoy the puzzles.`);
+        if (verificationError) {
+          setCheckoutNotice(verificationError.message);
+          return;
+        }
+        setAccessUntil(verificationData?.currentPeriodEnd ?? null);
+        setCheckoutNotice(`${accessPasses[selectedPass].name} activated. Enjoy the puzzles.`);
       },
       modal: { ondismiss: () => setCheckoutLoading(false) },
     });
@@ -290,6 +306,7 @@ export default function WavefrontApp() {
     if (!supabase) return;
     await supabase.auth.signOut();
     setAuthUser(null);
+    setAccessUntil(null);
   };
 
   const saveDifficultyRating = async (value: number) => {
@@ -323,7 +340,7 @@ export default function WavefrontApp() {
           <div className="streak-pill" title="Current solving streak">
             <span className="streak-dot" /><strong>7</strong> day streak
           </div>
-          <button className="subscribe-button" onClick={() => setShowSubscribe(true)}>Get full access</button>
+          <button className="subscribe-button" onClick={() => setShowSubscribe(true)}>{accessUntil && new Date(accessUntil).getTime() > Date.now() ? "Pass active" : "Get full access"}</button>
           {authUser ? (
             <button className="account-button" onClick={signOut} title="Sign out">
               <span>{authUser.email?.slice(0, 2).toUpperCase() ?? "ME"}</span>
@@ -585,11 +602,7 @@ export default function WavefrontApp() {
           <section className="subscribe-modal" role="dialog" aria-modal="true" aria-labelledby="subscribe-title" onMouseDown={(event) => event.stopPropagation()}>
             <button className="modal-close" aria-label="Close" onClick={() => setShowSubscribe(false)}>×</button>
             <AppMark /><span className="eyebrow">Wavefront Pass</span><h2 id="subscribe-title">Keep your mind in motion.</h2>
-            <div className="pass-options">{(Object.keys(accessPasses) as AccessPass[]).map((pass) => <button key={pass} className={`pass-option ${selectedPass === pass ? "selected" : ""}`} onClick={() => { setSelectedPass(pass); setCheckoutNotice(""); }}><strong>{accessPasses[pass].name}</strong><b>{accessPasses[pass].price}</b><span>{accessPasses[pass].description}</span></button>)}</div>
-            <div className="membership-lines"><span>All adaptive paths</span><span>Fortnightly puzzle drops</span><span>Community rankings</span></div>
-            <button className="checkout-button" onClick={() => void beginCheckout()} disabled={checkoutLoading}>{checkoutLoading ? "Opening secure checkout..." : `Get ${accessPasses[selectedPass].duration} access`} <span aria-hidden="true">→</span></button>
-            {checkoutNotice && <p className="checkout-notice">{checkoutNotice}</p>}
-            <small>One-time payment · No automatic renewal</small>
+            {accessUntil && new Date(accessUntil).getTime() > Date.now() ? <><div className="access-active"><strong>Your pass is active.</strong><span>Full access until {new Date(accessUntil).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</span></div><div className="membership-lines"><span>All adaptive paths</span><span>Fortnightly puzzle drops</span><span>Community rankings</span></div><small>One-time payment · No automatic renewal</small></> : <><div className="pass-options">{(Object.keys(accessPasses) as AccessPass[]).map((pass) => <button key={pass} className={`pass-option ${selectedPass === pass ? "selected" : ""}`} onClick={() => { setSelectedPass(pass); setCheckoutNotice(""); }}><strong>{accessPasses[pass].name}</strong><b>{accessPasses[pass].price}</b><span>{accessPasses[pass].description}</span></button>)}</div><div className="membership-lines"><span>All adaptive paths</span><span>Fortnightly puzzle drops</span><span>Community rankings</span></div><button className="checkout-button" onClick={() => void beginCheckout()} disabled={checkoutLoading}>{checkoutLoading ? "Opening secure checkout..." : `Get ${accessPasses[selectedPass].duration} access`} <span aria-hidden="true">→</span></button>{checkoutNotice && <p className="checkout-notice">{checkoutNotice}</p>}<small>One-time payment · No automatic renewal</small></>}
           </section>
         </div>
       )}
