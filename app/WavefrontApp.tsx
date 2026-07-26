@@ -79,6 +79,8 @@ export default function WavefrontApp() {
   const [authReady, setAuthReady] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
+  const [authCode, setAuthCode] = useState("");
+  const [authCodeSent, setAuthCodeSent] = useState(false);
   const [authMessage, setAuthMessage] = useState("");
   const [authSending, setAuthSending] = useState(false);
 
@@ -162,7 +164,7 @@ export default function WavefrontApp() {
     setShowPostForm(false);
   };
 
-  const sendSignInLink = async () => {
+  const sendSignInCode = async () => {
     const email = authEmail.trim();
     if (!email) {
       setAuthMessage("Enter your email address first.");
@@ -178,12 +180,40 @@ export default function WavefrontApp() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: window.location.origin,
         data: { display_name: email.split("@")[0] },
       },
     });
     setAuthSending(false);
-    setAuthMessage(error ? error.message : "Check your email for your secure sign-in link.");
+    if (error) {
+      setAuthMessage(error.message);
+      return;
+    }
+    setAuthCodeSent(true);
+    setAuthMessage("A six-digit code has been sent. Enter it below to sign in.");
+  };
+
+  const verifySignInCode = async () => {
+    const email = authEmail.trim();
+    const code = authCode.trim();
+    if (!/^[0-9]{6}$/.test(code)) {
+      setAuthMessage("Enter the six-digit code from your email.");
+      return;
+    }
+    if (!supabase) {
+      setAuthMessage("Sign-in is being activated. Please try again shortly.");
+      return;
+    }
+
+    setAuthSending(true);
+    setAuthMessage("");
+    const { error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
+    setAuthSending(false);
+    if (error) {
+      setAuthMessage(error.message);
+      return;
+    }
+    setAuthMessage("Signed in. Your puzzle progress will now be saved.");
+    setShowAuth(false);
   };
 
   const signOut = async () => {
@@ -515,8 +545,10 @@ export default function WavefrontApp() {
             <span className="eyebrow">Your Wavefront account</span>
             <h2 id="auth-title">Keep your progress moving.</h2>
             <p>Use your email to save your puzzle path, ratings, and membership.</p>
-            <label>Email address<input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="you@example.com" autoComplete="email" /></label>
-            <button className="checkout-button" onClick={() => void sendSignInLink()} disabled={authSending}>{authSending ? "Sending..." : "Email me a sign-in link"}</button>
+            <label>Email address<input type="email" value={authEmail} onChange={(event) => { setAuthEmail(event.target.value); setAuthCodeSent(false); setAuthCode(""); }} placeholder="you@example.com" autoComplete="email" /></label>
+            {authCodeSent && <label>Six-digit code<input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} value={authCode} onChange={(event) => setAuthCode(event.target.value.replace(/\D/g, ""))} placeholder="123456" autoComplete="one-time-code" /></label>}
+            <button className="checkout-button" onClick={() => void (authCodeSent ? verifySignInCode() : sendSignInCode())} disabled={authSending}>{authSending ? "Please wait..." : authCodeSent ? "Verify and sign in" : "Email me a six-digit code"}</button>
+            {authCodeSent && <button className="auth-secondary-action" onClick={() => void sendSignInCode()} disabled={authSending}>Send a new code</button>}
             {authMessage && <div className="auth-notice" role="status">{authMessage}</div>}
             <small>No password to remember. Your account is created securely on first sign-in.</small>
           </section>
