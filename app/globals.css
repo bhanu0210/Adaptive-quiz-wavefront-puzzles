@@ -1460,7 +1460,8 @@ select:focus-visible {
 }
 
 .subscribe-modal,
-.post-modal {
+.post-modal,
+.auth-modal {
   position: relative;
   width: min(430px, 100%);
   padding: 36px;
@@ -1489,7 +1490,8 @@ select:focus-visible {
 }
 
 .subscribe-modal h2,
-.post-modal h2 {
+.post-modal h2,
+.auth-modal h2 {
   margin: 7px 0 18px;
   font-size: 27px;
 }
@@ -1559,6 +1561,88 @@ select:focus-visible {
   font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.auth-modal > .brand-mark {
+  margin-bottom: 24px;
+}
+
+.auth-modal > p {
+  margin: 0 0 20px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.auth-modal label {
+  display: grid;
+  gap: 7px;
+  margin: 14px 0;
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.auth-modal input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  background: white;
+  color: var(--ink);
+  font-size: 12px;
+  text-transform: none;
+}
+
+.auth-modal > small {
+  display: block;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.auth-notice {
+  margin-top: 12px;
+  padding: 11px 12px;
+  border-radius: 5px;
+  background: var(--blue-soft);
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.account-button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.account-button span {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border-radius: 50%;
+  background: var(--cyan-soft);
+  color: var(--cyan);
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.account-button small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
 }
 
 .post-modal input,
@@ -1788,6 +1872,10 @@ select:focus-visible {
 
 @media (max-width: 520px) {
   .avatar-button {
+    display: none;
+  }
+
+  .account-button small {
     display: none;
   }
 

@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { User } from "@supabase/supabase-js";
 import puzzlesData from "./data/puzzles.json";
+import { supabase } from "./supabase";
 
 type Puzzle = (typeof puzzlesData)[number];
 type View = "solve" | "paths" | "leaderboard" | "community";
@@ -73,6 +75,36 @@ export default function WavefrontApp() {
   const [posts, setPosts] = useState(seedPosts);
   const [showPostForm, setShowPostForm] = useState(false);
   const [postTitle, setPostTitle] = useState("");
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
+  const [authSending, setAuthSending] = useState(false);
+
+  useEffect(() => {
+    if (!supabase) {
+      setAuthReady(true);
+      return;
+    }
+
+    let active = true;
+    void supabase.auth.getSession().then(({ data }) => {
+      if (active) {
+        setAuthUser(data.session?.user ?? null);
+        setAuthReady(true);
+      }
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (active) setAuthUser(session?.user ?? null);
+    });
+
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
 
   const recommendedPuzzle = useMemo(() => {
     const unsolved = puzzlesData.filter((puzzle) => !solvedIds.includes(puzzle.id));
@@ -130,6 +162,53 @@ export default function WavefrontApp() {
     setShowPostForm(false);
   };
 
+  const sendSignInLink = async () => {
+    const email = authEmail.trim();
+    if (!email) {
+      setAuthMessage("Enter your email address first.");
+      return;
+    }
+    if (!supabase) {
+      setAuthMessage("Sign-in is being activated. Please try again shortly.");
+      return;
+    }
+
+    setAuthSending(true);
+    setAuthMessage("");
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: window.location.origin,
+        data: { display_name: email.split("@")[0] },
+      },
+    });
+    setAuthSending(false);
+    setAuthMessage(error ? error.message : "Check your email for your secure sign-in link.");
+  };
+
+  const signOut = async () => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    setAuthUser(null);
+  };
+
+  const saveDifficultyRating = async (value: number) => {
+    setRating(value);
+    if (!activePuzzle) return;
+    if (!authUser) {
+      setAuthMessage("Sign in to save your difficulty rating.");
+      setShowAuth(true);
+      return;
+    }
+    if (!supabase) return;
+
+    const { error } = await supabase.from("puzzle_difficulty_ratings").upsert(
+      { user_id: authUser.id, puzzle_id: activePuzzle.id, rating: value },
+      { onConflict: "user_id,puzzle_id" },
+    );
+    if (error) setAuthMessage("Your rating could not be saved yet. Please try again.");
+  };
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -145,7 +224,16 @@ export default function WavefrontApp() {
             <span className="streak-dot" /><strong>7</strong> day streak
           </div>
           <button className="subscribe-button" onClick={() => setShowSubscribe(true)}>Get full access</button>
-          <button className="avatar-button" title="Open profile" aria-label="Open profile">BK</button>
+          {authUser ? (
+            <button className="account-button" onClick={signOut} title="Sign out">
+              <span>{authUser.email?.slice(0, 2).toUpperCase() ?? "ME"}</span>
+              <small>Sign out</small>
+            </button>
+          ) : (
+            <button className="avatar-button" onClick={() => setShowAuth(true)} title="Sign in" aria-label="Sign in">
+              {authReady ? "IN" : "..."}
+            </button>
+          )}
         </div>
       </header>
 
@@ -211,7 +299,7 @@ export default function WavefrontApp() {
                       <span>Rate the assigned difficulty</span>
                       <div>
                         {[1, 2, 3, 4, 5].map((value) => (
-                          <button aria-label={`Difficulty ${value} out of 5`} className={rating === value ? "rating active" : "rating"} key={value} onClick={() => setRating(value)}>{value}</button>
+                          <button aria-label={`Difficulty ${value} out of 5`} className={rating === value ? "rating active" : "rating"} key={value} onClick={() => void saveDifficultyRating(value)}>{value}</button>
                         ))}
                       </div>
                     </div>
@@ -415,6 +503,22 @@ export default function WavefrontApp() {
             <label>Puzzle title<input value={postTitle} onChange={(event) => setPostTitle(event.target.value)} placeholder="Give your puzzle a memorable name" /></label>
             <label>Section<select defaultValue="Logic & Knowledge">{categories.map((category) => <option key={category.name}>{category.name}</option>)}</select></label>
             <button className="checkout-button" onClick={addPost} disabled={!postTitle.trim()}>Send for review <span aria-hidden="true">→</span></button>
+          </section>
+        </div>
+      )}
+
+      {showAuth && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setShowAuth(false)}>
+          <section className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title" onMouseDown={(event) => event.stopPropagation()}>
+            <button className="modal-close" aria-label="Close" onClick={() => setShowAuth(false)}>×</button>
+            <AppMark />
+            <span className="eyebrow">Your Wavefront account</span>
+            <h2 id="auth-title">Keep your progress moving.</h2>
+            <p>Use your email to save your puzzle path, ratings, and membership.</p>
+            <label>Email address<input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="you@example.com" autoComplete="email" /></label>
+            <button className="checkout-button" onClick={() => void sendSignInLink()} disabled={authSending}>{authSending ? "Sending..." : "Email me a sign-in link"}</button>
+            {authMessage && <div className="auth-notice" role="status">{authMessage}</div>}
+            <small>No password to remember. Your account is created securely on first sign-in.</small>
           </section>
         </div>
       )}
