@@ -133,6 +133,7 @@ export default function WavefrontApp() {
   const [dailyBriefError, setDailyBriefError] = useState(false);
   const [learningTips, setLearningTips] = useState<LearningTip[]>([]);
   const [tipsLoading, setTipsLoading] = useState(false);
+  const [tipsError, setTipsError] = useState("");
 
   useEffect(() => {
     if (!supabase) {
@@ -200,11 +201,18 @@ export default function WavefrontApp() {
   useEffect(() => {
     if (!supabase || !hasActivePass) {
       setLearningTips([]);
+      setTipsError("");
       return;
     }
     setTipsLoading(true);
     void supabase.from("puzzle_learning_tips").select("id,category,title,body,sort_order").eq("publication_status", "published").order("category").order("sort_order")
-      .then(({ data }) => setLearningTips((data ?? []) as LearningTip[]))
+      .then(({ data, error }) => {
+        if (error) {
+          setTipsError("The learning library could not be loaded. Please refresh once.");
+          return;
+        }
+        setLearningTips((data ?? []) as LearningTip[]);
+      })
       .finally(() => setTipsLoading(false));
   }, [authUser?.id, hasActivePass]);
 
@@ -753,7 +761,7 @@ export default function WavefrontApp() {
         ) : view === "tips" ? (
           <section className="standard-view tips-view">
             <div className="page-heading split"><div><span className="eyebrow">Members learning library</span><h1>Methods that travel</h1><p>Short, reusable techniques drawn from the puzzle paths. Updated as new releases arrive.</p></div>{!hasActivePass && <button className="subscribe-button" onClick={() => setShowSubscribe(true)}>Unlock learning library</button>}</div>
-            {hasActivePass ? <div className="tips-library">{tipsLoading ? <p>Loading your learning library...</p> : categories.map((category) => { const pathTips = learningTips.filter((tip) => tip.category === category.name); return <section className="tips-chapter" key={category.name}><div><span className={`path-code ${category.color}`}>{category.code}</span><h2>{category.name}</h2><p>{pathTips.length} reusable methods</p></div><div className="tips-grid">{pathTips.map((tip) => <article className="tip-card" key={tip.id}><h3>{tip.title}</h3><p>{tip.body}</p></article>)}</div></section>; })}</div> : <section className="tips-locked"><span className="eyebrow">Subscriber access</span><h2>Build a toolkit, not just a score.</h2><p>Members can use the complete, growing tips library across logic, maths, strategy, algorithms, spatial reasoning, and patterns.</p><button className="checkout-button" onClick={() => setShowSubscribe(true)}>Get full access <span aria-hidden="true">→</span></button></section>}
+            {hasActivePass ? <div className="tips-library">{tipsLoading ? <p>Loading your learning library...</p> : tipsError ? <p className="tips-error">{tipsError}</p> : categories.map((category) => { const pathTips = learningTips.filter((tip) => tip.category === category.name); return <section className="tips-chapter" key={category.name}><div><span className={`path-code ${category.color}`}>{category.code}</span><h2>{category.name}</h2><p>{pathTips.length} reusable methods</p></div><div className="tips-grid">{pathTips.map((tip) => <article className="tip-card" key={tip.id}><h3>{tip.title}</h3><p>{tip.body}</p></article>)}</div></section>; })}</div> : <section className="tips-locked"><span className="eyebrow">Subscriber access</span><h2>Build a toolkit, not just a score.</h2><p>Members can use the complete, growing tips library across logic, maths, strategy, algorithms, spatial reasoning, and patterns.</p><button className="checkout-button" onClick={() => setShowSubscribe(true)}>Get full access <span aria-hidden="true">→</span></button></section>}
           </section>
         ) : view === "leaderboard" ? (
           <section className="standard-view">
