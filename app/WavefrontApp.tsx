@@ -488,6 +488,7 @@ export default function WavefrontApp() {
     { id: "solve", label: "Solve", glyph: "01" },
     { id: "daily", label: "Daily", glyph: "02" },
     { id: "feedback", label: "Feedback", glyph: "03" },
+    { id: "paths", label: "Paths", glyph: "04" },
     { id: "tips", label: "Tips", glyph: "05" },
     { id: "leaderboard", label: "Leaderboard", glyph: "06" },
     { id: "community", label: "Community", glyph: "07" },
@@ -921,7 +922,7 @@ export default function WavefrontApp() {
           </section>
         ) : view === "paths" ? (
           <section className="standard-view">
-            <div className="page-heading"><span className="eyebrow">Weekly curriculum preview</span><h1>Adaptive paths</h1><p>Explore each track here. Solve challenges only from the Solve section.</p></div>
+            <div className="page-heading"><span className="eyebrow">Choose your own starting point</span><h1>Explore the paths</h1><p>Pick any challenge from any section. Each solved block guides your next recommended challenge, but you are always free to explore.</p></div>
             <div className="path-list">
               {categories.map((category, categoryIndex) => {
                 const categoryPuzzles = livePuzzles.filter((puzzle) => puzzle.category === category.name);
@@ -934,10 +935,10 @@ export default function WavefrontApp() {
                     </div>
                     <div className="path-puzzles">
                       {categoryPuzzles.map((puzzle, index) => (
-                        <div key={puzzle.id}>
+                        <button type="button" key={puzzle.id} onClick={() => startPuzzle(puzzle)}>
                           <span className={solvedIds.includes(puzzle.id) ? "puzzle-dot solved" : "puzzle-dot"}>{solvedIds.includes(puzzle.id) ? "✓" : index + 1}</span>
                           <span><strong>{puzzle.title}</strong><small>{difficultyLabel(puzzle.difficulty)} · {puzzle.time} min</small></span><span aria-hidden="true">→</span>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </section>

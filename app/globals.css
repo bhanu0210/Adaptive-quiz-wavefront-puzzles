@@ -831,6 +831,26 @@ select:focus-visible {
   border-bottom: 0;
 }
 
+.path-puzzles button:hover,
+.path-puzzles button:focus-visible {
+  padding-inline: 12px;
+  border-radius: 6px;
+  background: #f1f7ff;
+  color: var(--blue);
+  outline: none;
+}
+
+.path-puzzles button > span:last-child {
+  color: var(--blue);
+  font-weight: 900;
+  transition: transform 160ms ease;
+}
+
+.path-puzzles button:hover > span:last-child,
+.path-puzzles button:focus-visible > span:last-child {
+  transform: translateX(4px);
+}
+
 .path-puzzles button > span:nth-child(2) {
   display: grid;
   gap: 4px;
