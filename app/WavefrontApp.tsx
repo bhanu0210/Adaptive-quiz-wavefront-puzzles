@@ -8,7 +8,7 @@ import { supabase } from "./supabase";
 
 const launchPuzzles = [...puzzlesData, ...launchExpansion];
 type Puzzle = (typeof launchPuzzles)[number];
-type View = "solve" | "daily" | "paths" | "leaderboard" | "community" | "admin";
+type View = "solve" | "daily" | "paths" | "tips" | "leaderboard" | "community" | "admin";
 type AccessPass = "monthly" | "annual";
 type DailyBrief = {
   date: string | null;
@@ -41,6 +41,13 @@ const categories = [
   { name: "Spatial Reasoning", code: "SR", color: "pink", mastery: 71 },
   { name: "Patterns & Numbers", code: "PN", color: "cyan", mastery: 53 },
 ] as const;
+
+type LearningTip = { id: string; category: string; title: string; body: string; sort_order: number };
+
+const categoryToPath: Record<(typeof categories)[number]["name"], string> = {
+  "Logic & Knowledge": "logic-knowledge", "Mathematical Reasoning": "mathematical-reasoning", "Probability & Strategy": "probability-strategy",
+  "Algorithms & Optimization": "algorithms-optimization", "Spatial Reasoning": "spatial-reasoning", "Patterns & Numbers": "patterns-numbers",
+};
 
 const samplePlayers = [
   ["Ananya P.", 3480, 88], ["Rohan S.", 3310, 86], ["Meera K.", 3180, 91], ["Vikram N.", 3010, 84], ["Sana M.", 2840, 89],
@@ -120,6 +127,8 @@ export default function WavefrontApp() {
   const [contentOverrides, setContentOverrides] = useState<Record<string, Partial<Puzzle>>>({});
   const [dailyBrief, setDailyBrief] = useState<DailyBrief | null>(null);
   const [dailyBriefError, setDailyBriefError] = useState(false);
+  const [learningTips, setLearningTips] = useState<LearningTip[]>([]);
+  const [tipsLoading, setTipsLoading] = useState(false);
 
   useEffect(() => {
     if (!supabase) {
@@ -182,6 +191,24 @@ export default function WavefrontApp() {
   const livePuzzles = useMemo(() => launchPuzzles.map((puzzle) => ({ ...puzzle, ...(contentOverrides[puzzle.id] ?? {}) })), [contentOverrides]);
 
   const isAdmin = authUser?.email?.toLowerCase() === "cbaforcat2017@gmail.com";
+  const hasActivePass = isAdmin || Boolean(accessUntil && new Date(accessUntil).getTime() > Date.now());
+
+  useEffect(() => {
+    if (!supabase || !hasActivePass) {
+      setLearningTips([]);
+      return;
+    }
+    setTipsLoading(true);
+    void supabase.from("puzzle_learning_tips").select("id,category,title,body,sort_order").eq("publication_status", "published").order("category").order("sort_order")
+      .then(({ data }) => setLearningTips((data ?? []) as LearningTip[]))
+      .finally(() => setTipsLoading(false));
+  }, [authUser?.id, hasActivePass]);
+
+  const fallbackAdminRecord = (puzzle: Puzzle): AdminPuzzle => ({
+    id: puzzle.id, title: puzzle.title, path: categoryToPath[puzzle.category as (typeof categories)[number]["name"]],
+    difficulty: puzzle.difficulty, expected_minutes: puzzle.time, access_level: "subscriber",
+    publication_status: "published", payload: puzzle, updated_at: "",
+  });
 
   const loadAdminData = async () => {
     if (!supabase || !isAdmin) return;
@@ -191,7 +218,10 @@ export default function WavefrontApp() {
       supabase.from("puzzle_profiles").select("user_id,display_name,created_at").order("created_at", { ascending: false }),
       supabase.from("puzzle_subscriptions").select("user_id,status,current_period_end"),
     ]);
-    if (catalogResult.data) setAdminPuzzles(catalogResult.data as AdminPuzzle[]);
+    if (catalogResult.data) {
+      const persisted = new Map((catalogResult.data as AdminPuzzle[]).map((puzzle) => [puzzle.id, puzzle]));
+      setAdminPuzzles(launchPuzzles.map((puzzle) => persisted.get(puzzle.id) ?? fallbackAdminRecord(puzzle)));
+    }
     if (profilesResult.data) {
       const subscriptions = new Map((subscriptionsResult.data ?? []).map((row) => [row.user_id, { status: row.status, current_period_end: row.current_period_end }]));
       setAdminMembers(profilesResult.data.map((profile) => ({ ...profile, subscription: subscriptions.get(profile.user_id) })));
@@ -211,9 +241,16 @@ export default function WavefrontApp() {
     if (!supabase || !adminSelectedId) return;
     try {
       const payload = JSON.parse(adminPayloadText) as Record<string, unknown>;
-      const { error } = await supabase.from("puzzle_catalog").update({ payload }).eq("id", adminSelectedId);
+      const puzzle = adminPuzzles.find((item) => item.id === adminSelectedId);
+      if (!puzzle) throw new Error("Puzzle not found");
+      const { error } = await supabase.from("puzzle_catalog").upsert({
+        id: puzzle.id, title: typeof payload.title === "string" ? payload.title : puzzle.title, path: puzzle.path,
+        difficulty: puzzle.difficulty, expected_minutes: puzzle.expected_minutes, access_level: puzzle.access_level,
+        publication_status: puzzle.publication_status, payload,
+        published_at: puzzle.publication_status === "published" ? new Date().toISOString() : null,
+      }, { onConflict: "id" });
       if (error) throw error;
-      setAdminNotice("Puzzle content draft saved.");
+      setAdminNotice("Puzzle content saved to the catalog.");
       await loadAdminData();
     } catch {
       setAdminNotice("Use valid JSON before saving this content draft.");
@@ -222,7 +259,11 @@ export default function WavefrontApp() {
 
   const setAdminPublication = async (puzzle: AdminPuzzle, publication_status: "draft" | "published") => {
     if (!supabase) return;
-    const { error } = await supabase.from("puzzle_catalog").update({ publication_status, published_at: publication_status === "published" ? new Date().toISOString() : null }).eq("id", puzzle.id);
+    const { error } = await supabase.from("puzzle_catalog").upsert({
+      id: puzzle.id, title: puzzle.title, path: puzzle.path, difficulty: puzzle.difficulty,
+      expected_minutes: puzzle.expected_minutes, access_level: puzzle.access_level, payload: puzzle.payload,
+      publication_status, published_at: publication_status === "published" ? new Date().toISOString() : null,
+    }, { onConflict: "id" });
     setAdminNotice(error ? "The publication status could not be updated." : `${puzzle.title} is now ${publication_status}.`);
     if (!error) await loadAdminData();
   };
@@ -266,9 +307,10 @@ export default function WavefrontApp() {
     { id: "solve", label: "Solve", glyph: "01" },
     { id: "daily", label: "Daily", glyph: "02" },
     { id: "paths", label: "Paths", glyph: "03" },
-    { id: "leaderboard", label: "Leaderboard", glyph: "04" },
-    { id: "community", label: "Community", glyph: "05" },
-    ...(isAdmin ? [{ id: "admin" as View, label: "Admin", glyph: "06" }] : []),
+    { id: "tips", label: "Tips", glyph: "04" },
+    { id: "leaderboard", label: "Leaderboard", glyph: "05" },
+    { id: "community", label: "Community", glyph: "06" },
+    ...(isAdmin ? [{ id: "admin" as View, label: "Admin", glyph: "07" }] : []),
   ];
 
   const changeView = (next: View) => {
@@ -661,6 +703,11 @@ export default function WavefrontApp() {
               })}
             </div>
           </section>
+        ) : view === "tips" ? (
+          <section className="standard-view tips-view">
+            <div className="page-heading split"><div><span className="eyebrow">Members learning library</span><h1>Methods that travel</h1><p>Short, reusable techniques drawn from the puzzle paths. Updated as new releases arrive.</p></div>{!hasActivePass && <button className="subscribe-button" onClick={() => setShowSubscribe(true)}>Unlock learning library</button>}</div>
+            {hasActivePass ? <div className="tips-grid">{tipsLoading ? <p>Loading your learning library...</p> : learningTips.map((tip) => <article className="tip-card" key={tip.id}><span>{tip.category}</span><h2>{tip.title}</h2><p>{tip.body}</p></article>)}</div> : <section className="tips-locked"><span className="eyebrow">Subscriber access</span><h2>Build a toolkit, not just a score.</h2><p>Members can use the complete, growing tips library across logic, maths, strategy, algorithms, spatial reasoning, and patterns.</p><button className="checkout-button" onClick={() => setShowSubscribe(true)}>Get full access <span aria-hidden="true">→</span></button></section>}
+          </section>
         ) : view === "leaderboard" ? (
           <section className="standard-view">
             <div className="page-heading split">
@@ -699,7 +746,7 @@ export default function WavefrontApp() {
             </div>
             <div className="admin-grid">
               <section className="admin-panel">
-                <div className="admin-panel-heading"><div><span className="eyebrow">Puzzle catalog</span><h2>Edit and publish</h2></div><span>{adminPuzzles.length} records</span></div>
+                <div className="admin-panel-heading"><div><span className="eyebrow">Puzzle catalog</span><h2>Edit and publish</h2></div><span>{adminPuzzles.length} of {launchPuzzles.length} editable</span></div>
                 <div className="admin-list">
                   {adminPuzzles.map((puzzle) => (
                     <button className={adminSelectedId === puzzle.id ? "admin-row selected" : "admin-row"} key={puzzle.id} onClick={() => selectAdminPuzzle(puzzle)}>
