@@ -27,6 +27,7 @@ type AdminPuzzle = {
   updated_at: string;
 };
 type AdminMember = { user_id: string; display_name: string; created_at: string; subscription?: { status: string; current_period_end: string | null } };
+type AdminTip = LearningTip & { publication_status: "draft" | "published" | "archived" };
 
 const accessPasses: Record<AccessPass, { name: string; price: string; duration: string; description: string }> = {
   monthly: { name: "30-Day Pass", price: "₹99", duration: "30 days", description: "Full access for one month" },
@@ -124,6 +125,9 @@ export default function WavefrontApp() {
   const [adminSelectedId, setAdminSelectedId] = useState<string | null>(null);
   const [adminPayloadText, setAdminPayloadText] = useState("");
   const [adminNotice, setAdminNotice] = useState("");
+  const [adminTips, setAdminTips] = useState<AdminTip[]>([]);
+  const [adminSelectedTipId, setAdminSelectedTipId] = useState<string | null>(null);
+  const [adminTipText, setAdminTipText] = useState("");
   const [contentOverrides, setContentOverrides] = useState<Record<string, Partial<Puzzle>>>({});
   const [dailyBrief, setDailyBrief] = useState<DailyBrief | null>(null);
   const [dailyBriefError, setDailyBriefError] = useState(false);
@@ -213,10 +217,11 @@ export default function WavefrontApp() {
   const loadAdminData = async () => {
     if (!supabase || !isAdmin) return;
     setAdminLoading(true);
-    const [catalogResult, profilesResult, subscriptionsResult] = await Promise.all([
+    const [catalogResult, profilesResult, subscriptionsResult, tipsResult] = await Promise.all([
       supabase.from("puzzle_catalog").select("id,title,path,difficulty,expected_minutes,access_level,publication_status,payload,updated_at").order("updated_at", { ascending: false }),
       supabase.from("puzzle_profiles").select("user_id,display_name,created_at").order("created_at", { ascending: false }),
       supabase.from("puzzle_subscriptions").select("user_id,status,current_period_end"),
+      supabase.from("puzzle_learning_tips").select("id,category,title,body,sort_order,publication_status").order("category").order("sort_order"),
     ]);
     if (catalogResult.data) {
       const persisted = new Map((catalogResult.data as AdminPuzzle[]).map((puzzle) => [puzzle.id, puzzle]));
@@ -226,6 +231,7 @@ export default function WavefrontApp() {
       const subscriptions = new Map((subscriptionsResult.data ?? []).map((row) => [row.user_id, { status: row.status, current_period_end: row.current_period_end }]));
       setAdminMembers(profilesResult.data.map((profile) => ({ ...profile, subscription: subscriptions.get(profile.user_id) })));
     }
+    if (tipsResult.data) setAdminTips(tipsResult.data as AdminTip[]);
     setAdminLoading(false);
   };
 
@@ -266,6 +272,47 @@ export default function WavefrontApp() {
     }, { onConflict: "id" });
     setAdminNotice(error ? "The publication status could not be updated." : `${puzzle.title} is now ${publication_status}.`);
     if (!error) await loadAdminData();
+  };
+
+  const syncLaunchCatalog = async () => {
+    if (!supabase) return;
+    setAdminLoading(true);
+    const rows = launchPuzzles.map((puzzle) => ({
+      id: puzzle.id, title: puzzle.title, path: categoryToPath[puzzle.category as (typeof categories)[number]["name"]],
+      difficulty: puzzle.difficulty, expected_minutes: puzzle.time, access_level: "subscriber", publication_status: "published", payload: puzzle,
+      published_at: new Date().toISOString(),
+    }));
+    const { error } = await supabase.from("puzzle_catalog").upsert(rows, { onConflict: "id" });
+    setAdminNotice(error ? "The catalog sync could not be completed." : "All 72 launch puzzles are now stored in the editable catalog.");
+    await loadAdminData();
+  };
+
+  const selectAdminTip = (tip: AdminTip) => {
+    setAdminSelectedTipId(tip.id);
+    setAdminTipText(JSON.stringify(tip, null, 2));
+    setAdminNotice("");
+  };
+
+  const createAdminTip = () => {
+    setAdminSelectedTipId("new");
+    setAdminTipText(JSON.stringify({ category: "Logic & Knowledge", title: "New learning tip", body: "Write a clear, reusable method that helps a solver tackle similar puzzles.", sort_order: 99, publication_status: "draft" }, null, 2));
+    setAdminNotice("");
+  };
+
+  const saveAdminTip = async () => {
+    if (!supabase || !adminSelectedTipId) return;
+    try {
+      const tip = JSON.parse(adminTipText) as AdminTip;
+      const row = { category: tip.category, title: tip.title, body: tip.body, sort_order: tip.sort_order, publication_status: tip.publication_status };
+      const { error } = adminSelectedTipId === "new"
+        ? await supabase.from("puzzle_learning_tips").insert(row)
+        : await supabase.from("puzzle_learning_tips").update(row).eq("id", adminSelectedTipId);
+      if (error) throw error;
+      setAdminNotice("Learning tip saved.");
+      await loadAdminData();
+    } catch {
+      setAdminNotice("Use valid JSON with category, title, body, sort_order, and publication_status.");
+    }
   };
 
   const recommendedPuzzle = useMemo(() => {
@@ -706,7 +753,7 @@ export default function WavefrontApp() {
         ) : view === "tips" ? (
           <section className="standard-view tips-view">
             <div className="page-heading split"><div><span className="eyebrow">Members learning library</span><h1>Methods that travel</h1><p>Short, reusable techniques drawn from the puzzle paths. Updated as new releases arrive.</p></div>{!hasActivePass && <button className="subscribe-button" onClick={() => setShowSubscribe(true)}>Unlock learning library</button>}</div>
-            {hasActivePass ? <div className="tips-grid">{tipsLoading ? <p>Loading your learning library...</p> : learningTips.map((tip) => <article className="tip-card" key={tip.id}><span>{tip.category}</span><h2>{tip.title}</h2><p>{tip.body}</p></article>)}</div> : <section className="tips-locked"><span className="eyebrow">Subscriber access</span><h2>Build a toolkit, not just a score.</h2><p>Members can use the complete, growing tips library across logic, maths, strategy, algorithms, spatial reasoning, and patterns.</p><button className="checkout-button" onClick={() => setShowSubscribe(true)}>Get full access <span aria-hidden="true">→</span></button></section>}
+            {hasActivePass ? <div className="tips-library">{tipsLoading ? <p>Loading your learning library...</p> : categories.map((category) => { const pathTips = learningTips.filter((tip) => tip.category === category.name); return <section className="tips-chapter" key={category.name}><div><span className={`path-code ${category.color}`}>{category.code}</span><h2>{category.name}</h2><p>{pathTips.length} reusable methods</p></div><div className="tips-grid">{pathTips.map((tip) => <article className="tip-card" key={tip.id}><h3>{tip.title}</h3><p>{tip.body}</p></article>)}</div></section>; })}</div> : <section className="tips-locked"><span className="eyebrow">Subscriber access</span><h2>Build a toolkit, not just a score.</h2><p>Members can use the complete, growing tips library across logic, maths, strategy, algorithms, spatial reasoning, and patterns.</p><button className="checkout-button" onClick={() => setShowSubscribe(true)}>Get full access <span aria-hidden="true">→</span></button></section>}
           </section>
         ) : view === "leaderboard" ? (
           <section className="standard-view">
@@ -737,7 +784,7 @@ export default function WavefrontApp() {
           <section className="admin-view">
             <div className="page-heading split">
               <div><span className="eyebrow">Owner console</span><h1>Publishing control</h1><p>Review puzzle content, release status, and member access from one place.</p></div>
-              <button className="text-action" onClick={() => void loadAdminData()} disabled={adminLoading}>{adminLoading ? "Refreshing..." : "Refresh data"}</button>
+              <div className="admin-toolbar"><button className="text-action" onClick={() => void syncLaunchCatalog()} disabled={adminLoading}>Store all 72 puzzles</button><button className="text-action" onClick={() => void loadAdminData()} disabled={adminLoading}>{adminLoading ? "Refreshing..." : "Refresh data"}</button></div>
             </div>
             <div className="admin-stats">
               <div><strong>{adminPuzzles.length}</strong><span>catalog puzzles</span></div>
@@ -763,6 +810,16 @@ export default function WavefrontApp() {
                   <div className="admin-actions"><button className="primary-action small" onClick={() => void saveAdminPayload()}>Save draft</button>{(() => { const puzzle = adminPuzzles.find((item) => item.id === adminSelectedId); return puzzle ? <button className="text-action" onClick={() => void setAdminPublication(puzzle, puzzle.publication_status === "published" ? "draft" : "published")}>{puzzle.publication_status === "published" ? "Move to draft" : "Publish"}</button> : null; })()}</div>
                 </> : <p className="admin-empty">Choose a catalog record to review its structured content and publication state.</p>}
                 {adminNotice && <p className="admin-notice">{adminNotice}</p>}
+              </section>
+            </div>
+            <div className="admin-grid">
+              <section className="admin-panel">
+                <div className="admin-panel-heading"><div><span className="eyebrow">Learning library</span><h2>Edit subscriber tips</h2></div><button className="text-action" onClick={createAdminTip}>New tip</button></div>
+                <div className="admin-list">{adminTips.map((tip) => <button className={adminSelectedTipId === tip.id ? "admin-row selected" : "admin-row"} key={tip.id} onClick={() => selectAdminTip(tip)}><span><strong>{tip.title}</strong><small>{tip.category}</small></span><em className={tip.publication_status === "published" ? "status-live" : "status-draft"}>{tip.publication_status}</em></button>)}</div>
+              </section>
+              <section className="admin-panel editor-panel">
+                <div className="admin-panel-heading"><div><span className="eyebrow">Tip editor</span><h2>{adminSelectedTipId ? adminTips.find((tip) => tip.id === adminSelectedTipId)?.title : "Select a learning tip"}</h2></div></div>
+                {adminSelectedTipId ? <><label className="admin-editor-label">Structured learning tip<textarea value={adminTipText} onChange={(event) => setAdminTipText(event.target.value)} spellCheck={false} /></label><div className="admin-actions"><button className="primary-action small" onClick={() => void saveAdminTip()}>Save tip</button></div></> : <p className="admin-empty">Choose a learning tip to update its text or publication state.</p>}
               </section>
             </div>
             <section className="admin-panel member-panel">
