@@ -470,6 +470,16 @@ select:focus-visible {
   min-height: 286px;
 }
 
+.puzzle-illustration {
+  position: relative;
+  z-index: 1;
+  min-height: 286px;
+  background-image: url("/puzzle-hero-v2.png");
+  background-position: center right;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
 .signal-node {
   position: absolute;
   z-index: 2;
@@ -1921,7 +1931,8 @@ select:focus-visible {
     font-size: 28px;
   }
 
-  .signal-field {
+  .signal-field,
+  .puzzle-illustration {
     position: absolute;
     right: 0;
     bottom: -10px;
@@ -2111,7 +2122,7 @@ select:focus-visible {
   .stat-strip div { min-width: 0; padding: 11px 9px; border-right: 1px solid var(--line); }
   .stat-strip div:last-child { border-right: 0; }
   .stat-strip strong { font-size: 17px; }.stat-strip span { font-size: 10px; }
-  .adaptive-feature { min-height: 350px; border-radius: 8px; }.feature-copy { padding: 24px 20px; }.feature-copy h2 { max-width: 13ch; font-size: 25px; line-height: 1.12; }.feature-copy p { max-width: 24ch; font-size: 13px; line-height: 1.5; }.feature-copy button { min-height: 42px; padding: 0 14px; }.signal-field { min-height: 155px; }.feature-score { right: 14px; bottom: 12px; }
+  .adaptive-feature { min-height: 350px; border-radius: 8px; }.feature-copy { padding: 24px 20px; }.feature-copy h2 { max-width: 13ch; font-size: 25px; line-height: 1.12; }.feature-copy p { max-width: 24ch; font-size: 13px; line-height: 1.5; }.feature-copy button { min-height: 42px; padding: 0 14px; }.signal-field, .puzzle-illustration { min-height: 155px; }.feature-score { right: 14px; bottom: 12px; }
   .section-heading { gap: 12px; margin-top: 30px; margin-bottom: 14px; }.section-heading h2 { font-size: 20px; }.text-action { min-height: 36px; padding: 0 8px; font-size: 12px; }
   .path-grid { gap: 10px; }.path-card { min-height: 154px; padding: 17px; }.path-card h3 { font-size: 18px; }.path-topline, .path-footer { font-size: 11px; }
   .daily-view .page-heading { margin-bottom: 18px; }.daily-date { margin: 0 0 16px; font-size: 11px; }.daily-puzzle-grid { gap: 12px; }.daily-puzzle-card { min-height: 0; gap: 12px; padding: 18px; border-radius: 7px; }.daily-puzzle-card > strong { font-size: 12px; }.daily-puzzle-card p { font-size: 14px; line-height: 1.58; }.daily-answer input { min-height: 44px; font-size: 15px; }.daily-answer button, .daily-unlock { min-height: 44px; font-size: 13px; }.daily-puzzle-card a { min-height: 38px; font-size: 11px; }.daily-note { margin-top: 26px; }.daily-note h2 { font-size: 19px; }.daily-note p { font-size: 13px; }

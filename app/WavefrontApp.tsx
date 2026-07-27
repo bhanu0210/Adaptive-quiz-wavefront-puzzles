@@ -119,17 +119,7 @@ function AppMark() {
 }
 
 function SignalField() {
-  return (
-    <div className="signal-field" aria-hidden="true">
-      <span className="signal-line line-a" />
-      <span className="signal-line line-b" />
-      <span className="signal-line line-c" />
-      <span className="signal-line line-d" />
-      {[0, 1, 2, 3, 4, 5, 6].map((node) => (
-        <span className={`signal-node node-${node}`} key={node}>{node === 3 ? "WF" : ""}</span>
-      ))}
-    </div>
-  );
+  return <div className="puzzle-illustration" aria-hidden="true" />;
 }
 
 export default function WavefrontApp() {
