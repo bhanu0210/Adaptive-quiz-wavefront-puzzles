@@ -176,6 +176,9 @@ select:focus-visible {
   box-shadow: 0 0 0 4px var(--coral-soft);
 }
 
+.streak-pill.streak-goal { border-color: #83cbb3; background: var(--green-soft); color: #0b674e; }
+.streak-pill.streak-goal .streak-dot { background: var(--green); box-shadow: 0 0 0 4px rgba(0, 143, 105, 0.14); }
+
 .subscribe-button,
 .checkout-button,
 .next-action {

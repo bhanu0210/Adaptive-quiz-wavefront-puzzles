@@ -69,6 +69,21 @@ function difficultyLabel(level: number) {
   return "Expert";
 }
 
+function indiaDateKey(value: Date | string) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
+}
+
+function calculateStreak(solvedAt: string[]) {
+  const solvedDays = new Set(solvedAt.map(indiaDateKey));
+  let streak = 0;
+  const cursor = new Date();
+  while (solvedDays.has(indiaDateKey(cursor))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
 function AppMark() {
   return (
     <div className="brand-mark" aria-hidden="true">
@@ -134,6 +149,8 @@ export default function WavefrontApp() {
   const [learningTips, setLearningTips] = useState<LearningTip[]>([]);
   const [tipsLoading, setTipsLoading] = useState(false);
   const [tipsError, setTipsError] = useState("");
+  const [streakDays, setStreakDays] = useState(0);
+  const [streakVersion, setStreakVersion] = useState(0);
 
   useEffect(() => {
     if (!supabase) {
@@ -215,6 +232,15 @@ export default function WavefrontApp() {
       })
       .finally(() => setTipsLoading(false));
   }, [authUser?.id, hasActivePass]);
+
+  useEffect(() => {
+    if (!supabase || !authUser) {
+      setStreakDays(0);
+      return;
+    }
+    void supabase.from("puzzle_progress").select("solved_at").eq("user_id", authUser.id).not("solved_at", "is", null)
+      .then(({ data }) => setStreakDays(calculateStreak((data ?? []).flatMap((row) => row.solved_at ? [row.solved_at] : []))));
+  }, [authUser?.id, streakVersion]);
 
   const fallbackAdminRecord = (puzzle: Puzzle): AdminPuzzle => ({
     id: puzzle.id, title: puzzle.title, path: categoryToPath[puzzle.category as (typeof categories)[number]["name"]],
@@ -356,6 +382,10 @@ export default function WavefrontApp() {
       ...current,
       [activePuzzle.category]: Math.min(100, (current[activePuzzle.category] ?? 0) + points),
     }));
+    if (supabase && authUser) {
+      void supabase.from("puzzle_progress").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, attempts: 1, hints_used: revealedHints, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" })
+        .then(() => setStreakVersion((version) => version + 1));
+    }
   };
 
   const navigation: { id: View; label: string; glyph: string }[] = [
@@ -550,8 +580,8 @@ export default function WavefrontApp() {
           <a className="daily-link" href="https://wavefrontdaily.in" target="_blank" rel="noreferrer">
             Read Wavefront Daily <span aria-hidden="true">↗</span>
           </a>
-          <div className="streak-pill" title="Current solving streak">
-            <span className="streak-dot" /><strong>7</strong> day streak
+          <div className={streakDays >= 7 ? "streak-pill streak-goal" : "streak-pill"} title="Consecutive days with at least one correct solve">
+            <span className="streak-dot" /><strong>{streakDays}</strong> day streak
           </div>
           <button className="subscribe-button" onClick={() => setShowSubscribe(true)}>{accessUntil && new Date(accessUntil).getTime() > Date.now() ? "Pass active" : "Get full access"}</button>
           {authUser ? (
