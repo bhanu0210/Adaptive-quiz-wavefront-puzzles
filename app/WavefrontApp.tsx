@@ -28,6 +28,8 @@ type AdminPuzzle = {
 };
 type AdminMember = { user_id: string; display_name: string; created_at: string; subscription?: { status: string; current_period_end: string | null } };
 type AdminTip = LearningTip & { publication_status: "draft" | "published" | "archived" };
+type AdminPuzzleForm = { title: string; category: string; difficulty: number; time: number; question: string; options: string[]; correctOption: number; hints: string[]; explanation: string; takeaway: string; publication_status: "draft" | "published" };
+type AdminTipForm = { category: string; title: string; body: string; sort_order: number; publication_status: "draft" | "published" | "archived" };
 
 const accessPasses: Record<AccessPass, { name: string; price: string; duration: string; description: string }> = {
   monthly: { name: "30-Day Pass", price: "₹99", duration: "30 days", description: "Full access for one month" },
@@ -49,6 +51,8 @@ const categoryToPath: Record<(typeof categories)[number]["name"], string> = {
   "Logic & Knowledge": "logic-knowledge", "Mathematical Reasoning": "mathematical-reasoning", "Probability & Strategy": "probability-strategy",
   "Algorithms & Optimization": "algorithms-optimization", "Spatial Reasoning": "spatial-reasoning", "Patterns & Numbers": "patterns-numbers",
 };
+
+const pathToCategory = (path: string) => categories.find((category) => categoryToPath[category.name] === path)?.name ?? "Logic & Knowledge";
 
 const samplePlayers = [
   ["Ananya P.", 3480, 88], ["Rohan S.", 3310, 86], ["Meera K.", 3180, 91], ["Vikram N.", 3010, 84], ["Sana M.", 2840, 89],
@@ -141,11 +145,11 @@ export default function WavefrontApp() {
   const [adminMembers, setAdminMembers] = useState<AdminMember[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminSelectedId, setAdminSelectedId] = useState<string | null>(null);
-  const [adminPayloadText, setAdminPayloadText] = useState("");
+  const [adminPuzzleForm, setAdminPuzzleForm] = useState<AdminPuzzleForm | null>(null);
   const [adminNotice, setAdminNotice] = useState("");
   const [adminTips, setAdminTips] = useState<AdminTip[]>([]);
   const [adminSelectedTipId, setAdminSelectedTipId] = useState<string | null>(null);
-  const [adminTipText, setAdminTipText] = useState("");
+  const [adminTipForm, setAdminTipForm] = useState<AdminTipForm | null>(null);
   const [contentOverrides, setContentOverrides] = useState<Record<string, Partial<Puzzle>>>({});
   const [dailyBrief, setDailyBrief] = useState<DailyBrief | null>(null);
   const [dailyBriefError, setDailyBriefError] = useState(false);
@@ -283,28 +287,35 @@ export default function WavefrontApp() {
   useEffect(() => { void loadAdminData(); }, [authUser?.id]);
 
   const selectAdminPuzzle = (puzzle: AdminPuzzle) => {
+    const payload = puzzle.payload as Partial<Puzzle>;
     setAdminSelectedId(puzzle.id);
-    setAdminPayloadText(JSON.stringify(puzzle.payload ?? {}, null, 2));
+    setAdminPuzzleForm({
+      title: payload.title ?? puzzle.title, category: payload.category ?? pathToCategory(puzzle.path), difficulty: payload.difficulty ?? puzzle.difficulty,
+      time: payload.time ?? puzzle.expected_minutes, question: payload.question ?? "", options: [...(payload.options ?? ["", "", "", ""])],
+      correctOption: payload.correctOption ?? 0, hints: [...(payload.hints ?? ["", "", ""])], explanation: payload.explanation ?? "", takeaway: payload.takeaway ?? "",
+      publication_status: puzzle.publication_status === "draft" ? "draft" : "published",
+    });
     setAdminNotice("");
   };
 
   const saveAdminPayload = async () => {
-    if (!supabase || !adminSelectedId) return;
+    if (!supabase || !adminSelectedId || !adminPuzzleForm) return;
     try {
-      const payload = JSON.parse(adminPayloadText) as Record<string, unknown>;
       const puzzle = adminPuzzles.find((item) => item.id === adminSelectedId);
       if (!puzzle) throw new Error("Puzzle not found");
+      if (!adminPuzzleForm.title.trim() || !adminPuzzleForm.question.trim() || adminPuzzleForm.options.some((option) => !option.trim()) || adminPuzzleForm.hints.some((hint) => !hint.trim()) || !adminPuzzleForm.explanation.trim()) throw new Error("Missing required fields");
+      const payload = { ...(puzzle.payload ?? {}), id: puzzle.id, title: adminPuzzleForm.title.trim(), category: adminPuzzleForm.category, difficulty: adminPuzzleForm.difficulty, time: adminPuzzleForm.time, question: adminPuzzleForm.question.trim(), options: adminPuzzleForm.options.map((option) => option.trim()), correctOption: adminPuzzleForm.correctOption, hints: adminPuzzleForm.hints.map((hint) => hint.trim()), explanation: adminPuzzleForm.explanation.trim(), takeaway: adminPuzzleForm.takeaway.trim() };
       const { error } = await supabase.from("puzzle_catalog").upsert({
-        id: puzzle.id, title: typeof payload.title === "string" ? payload.title : puzzle.title, path: puzzle.path,
-        difficulty: puzzle.difficulty, expected_minutes: puzzle.expected_minutes, access_level: puzzle.access_level,
-        publication_status: puzzle.publication_status, payload,
-        published_at: puzzle.publication_status === "published" ? new Date().toISOString() : null,
+        id: puzzle.id, title: adminPuzzleForm.title.trim(), path: categoryToPath[adminPuzzleForm.category as (typeof categories)[number]["name"]],
+        difficulty: adminPuzzleForm.difficulty, expected_minutes: adminPuzzleForm.time, access_level: puzzle.access_level,
+        publication_status: adminPuzzleForm.publication_status, payload,
+        published_at: adminPuzzleForm.publication_status === "published" ? new Date().toISOString() : null,
       }, { onConflict: "id" });
       if (error) throw error;
-      setAdminNotice("Puzzle content saved to the catalog.");
+      setAdminNotice("Puzzle saved.");
       await loadAdminData();
     } catch {
-      setAdminNotice("Use valid JSON before saving this content draft.");
+      setAdminNotice("Complete the title, question, four answers, three hints, and explanation before saving.");
     }
   };
 
@@ -334,21 +345,21 @@ export default function WavefrontApp() {
 
   const selectAdminTip = (tip: AdminTip) => {
     setAdminSelectedTipId(tip.id);
-    setAdminTipText(JSON.stringify(tip, null, 2));
+    setAdminTipForm({ category: tip.category, title: tip.title, body: tip.body, sort_order: tip.sort_order, publication_status: tip.publication_status });
     setAdminNotice("");
   };
 
   const createAdminTip = () => {
     setAdminSelectedTipId("new");
-    setAdminTipText(JSON.stringify({ category: "Logic & Knowledge", title: "New learning tip", body: "Write a clear, reusable method that helps a solver tackle similar puzzles.", sort_order: 99, publication_status: "draft" }, null, 2));
+    setAdminTipForm({ category: "Logic & Knowledge", title: "New learning tip", body: "Write a clear, reusable method that helps a solver tackle similar puzzles.", sort_order: 99, publication_status: "draft" });
     setAdminNotice("");
   };
 
   const saveAdminTip = async () => {
-    if (!supabase || !adminSelectedTipId) return;
+    if (!supabase || !adminSelectedTipId || !adminTipForm) return;
     try {
-      const tip = JSON.parse(adminTipText) as AdminTip;
-      const row = { category: tip.category, title: tip.title, body: tip.body, sort_order: tip.sort_order, publication_status: tip.publication_status };
+      const row = { category: adminTipForm.category, title: adminTipForm.title.trim(), body: adminTipForm.body.trim(), sort_order: adminTipForm.sort_order, publication_status: adminTipForm.publication_status };
+      if (!row.title || !row.body) throw new Error("Missing required fields");
       const { error } = adminSelectedTipId === "new"
         ? await supabase.from("puzzle_learning_tips").insert(row)
         : await supabase.from("puzzle_learning_tips").update(row).eq("id", adminSelectedTipId);
@@ -356,7 +367,7 @@ export default function WavefrontApp() {
       setAdminNotice("Learning tip saved.");
       await loadAdminData();
     } catch {
-      setAdminNotice("Use valid JSON with category, title, body, sort_order, and publication_status.");
+      setAdminNotice("Give the learning tip a title and clear explanation before saving.");
     }
   };
 
@@ -862,10 +873,15 @@ export default function WavefrontApp() {
               </section>
               <section className="admin-panel editor-panel">
                 <div className="admin-panel-heading"><div><span className="eyebrow">Content editor</span><h2>{adminSelectedId ? adminPuzzles.find((puzzle) => puzzle.id === adminSelectedId)?.title : "Select a puzzle"}</h2></div></div>
-                {adminSelectedId ? <>
-                  <label className="admin-editor-label">Structured content payload<textarea value={adminPayloadText} onChange={(event) => setAdminPayloadText(event.target.value)} spellCheck={false} /></label>
-                  <div className="admin-actions"><button className="primary-action small" onClick={() => void saveAdminPayload()}>Save draft</button>{(() => { const puzzle = adminPuzzles.find((item) => item.id === adminSelectedId); return puzzle ? <button className="text-action" onClick={() => void setAdminPublication(puzzle, puzzle.publication_status === "published" ? "draft" : "published")}>{puzzle.publication_status === "published" ? "Move to draft" : "Publish"}</button> : null; })()}</div>
-                </> : <p className="admin-empty">Choose a catalog record to review its structured content and publication state.</p>}
+                {adminSelectedId && adminPuzzleForm ? <div className="content-form">
+                  <label>Title<input value={adminPuzzleForm.title} onChange={(event) => setAdminPuzzleForm({ ...adminPuzzleForm, title: event.target.value })} /></label>
+                  <div className="content-form-row"><label>Path<select value={adminPuzzleForm.category} onChange={(event) => setAdminPuzzleForm({ ...adminPuzzleForm, category: event.target.value })}>{categories.map((category) => <option key={category.name}>{category.name}</option>)}</select></label><label>Difficulty<select value={adminPuzzleForm.difficulty} onChange={(event) => setAdminPuzzleForm({ ...adminPuzzleForm, difficulty: Number(event.target.value) })}>{[1, 2, 3, 4, 5].map((level) => <option value={level} key={level}>Level {level}</option>)}</select></label><label>Minutes<input type="number" min="1" max="180" value={adminPuzzleForm.time} onChange={(event) => setAdminPuzzleForm({ ...adminPuzzleForm, time: Number(event.target.value) })} /></label></div>
+                  <label>Question<textarea value={adminPuzzleForm.question} onChange={(event) => setAdminPuzzleForm({ ...adminPuzzleForm, question: event.target.value })} /></label>
+                  <fieldset><legend>Answer options</legend>{adminPuzzleForm.options.map((option, index) => <label className="option-edit" key={index}><input type="radio" name="correct-answer" checked={adminPuzzleForm.correctOption === index} onChange={() => setAdminPuzzleForm({ ...adminPuzzleForm, correctOption: index })} /><input value={option} onChange={(event) => setAdminPuzzleForm({ ...adminPuzzleForm, options: adminPuzzleForm.options.map((item, itemIndex) => itemIndex === index ? event.target.value : item) })} placeholder={`Option ${index + 1}`} /></label>)}</fieldset>
+                  <fieldset><legend>Hints in order</legend>{adminPuzzleForm.hints.map((hint, index) => <label key={index}>Hint {index + 1}<textarea value={hint} onChange={(event) => setAdminPuzzleForm({ ...adminPuzzleForm, hints: adminPuzzleForm.hints.map((item, itemIndex) => itemIndex === index ? event.target.value : item) })} /></label>)}</fieldset>
+                  <label>Explanation<textarea value={adminPuzzleForm.explanation} onChange={(event) => setAdminPuzzleForm({ ...adminPuzzleForm, explanation: event.target.value })} /></label><label>Pattern tip / takeaway<textarea value={adminPuzzleForm.takeaway} onChange={(event) => setAdminPuzzleForm({ ...adminPuzzleForm, takeaway: event.target.value })} /></label>
+                  <div className="content-form-row"><label>Publication<select value={adminPuzzleForm.publication_status} onChange={(event) => setAdminPuzzleForm({ ...adminPuzzleForm, publication_status: event.target.value as "draft" | "published" })}><option value="draft">Draft</option><option value="published">Published</option></select></label><button className="primary-action small" onClick={() => void saveAdminPayload()}>Save puzzle</button></div>
+                </div> : <p className="admin-empty">Choose a catalog record to edit its content.</p>}
                 {adminNotice && <p className="admin-notice">{adminNotice}</p>}
               </section>
             </div>
@@ -876,7 +892,7 @@ export default function WavefrontApp() {
               </section>
               <section className="admin-panel editor-panel">
                 <div className="admin-panel-heading"><div><span className="eyebrow">Tip editor</span><h2>{adminSelectedTipId ? adminTips.find((tip) => tip.id === adminSelectedTipId)?.title : "Select a learning tip"}</h2></div></div>
-                {adminSelectedTipId ? <><label className="admin-editor-label">Structured learning tip<textarea value={adminTipText} onChange={(event) => setAdminTipText(event.target.value)} spellCheck={false} /></label><div className="admin-actions"><button className="primary-action small" onClick={() => void saveAdminTip()}>Save tip</button></div></> : <p className="admin-empty">Choose a learning tip to update its text or publication state.</p>}
+                {adminSelectedTipId && adminTipForm ? <div className="content-form"><label>Title<input value={adminTipForm.title} onChange={(event) => setAdminTipForm({ ...adminTipForm, title: event.target.value })} /></label><div className="content-form-row"><label>Path<select value={adminTipForm.category} onChange={(event) => setAdminTipForm({ ...adminTipForm, category: event.target.value })}>{categories.map((category) => <option key={category.name}>{category.name}</option>)}</select></label><label>Order<input type="number" min="1" value={adminTipForm.sort_order} onChange={(event) => setAdminTipForm({ ...adminTipForm, sort_order: Number(event.target.value) })} /></label><label>Status<select value={adminTipForm.publication_status} onChange={(event) => setAdminTipForm({ ...adminTipForm, publication_status: event.target.value as AdminTipForm["publication_status"] })}><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></label></div><label>Learning method<textarea value={adminTipForm.body} onChange={(event) => setAdminTipForm({ ...adminTipForm, body: event.target.value })} /></label><button className="primary-action small" onClick={() => void saveAdminTip()}>Save tip</button></div> : <p className="admin-empty">Choose a learning tip to edit it.</p>}
               </section>
             </div>
             <section className="admin-panel member-panel">
