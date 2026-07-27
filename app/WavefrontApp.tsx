@@ -31,6 +31,8 @@ type AdminTip = LearningTip & { publication_status: "draft" | "published" | "arc
 type AdminPuzzleForm = { title: string; category: string; difficulty: number; time: number; question: string; options: string[]; correctOption: number; hints: string[]; explanation: string; takeaway: string; publication_status: "draft" | "published" };
 type AdminTipForm = { category: string; title: string; body: string; sort_order: number; publication_status: "draft" | "published" | "archived" };
 type FeedbackKind = "general" | "unclear" | "incorrect" | "difficulty" | "suggestion";
+type RealLeader = { user_id: string; display_name: string; score: number; solved_count: number };
+type AdminFeedback = { id: string; user_id: string; puzzle_id: string; issue_type: string; rating: number | null; note: string; created_at: string };
 
 const accessPasses: Record<AccessPass, { name: string; price: string; duration: string; description: string }> = {
   monthly: { name: "30-Day Pass", price: "₹99", duration: "30 days", description: "Full access for one month" },
@@ -79,7 +81,7 @@ const samplePlayers = [
   ["Arjun D.", 2690, 82], ["Kavya R.", 2520, 87], ["Ishaan G.", 2380, 80], ["Priya L.", 2210, 85], ["Dev A.", 2050, 79],
   ["Neha V.", 1880, 83], ["Rahul T.", 1710, 78], ["Zoya F.", 1540, 81], ["Aman B.", 1360, 76], ["Mira C.", 1190, 80],
   ["Kabir J.", 1010, 74], ["Tara H.", 830, 77], ["Nikhil W.", 650, 72], ["Diya E.", 420, 75], ["Om P.", 240, 70],
-].map(([name, score, accuracy]) => ({ name: name as string, score: score as number, accuracy: accuracy as number, streak: 0 }));
+].map(([name, score]) => ({ name: name as string, score: score as number, solved: Math.max(1, Math.round((score as number) / 75)), streak: 0 }));
 
 const seedPosts = [
   { id: 1, initials: "AK", author: "Aarav K.", title: "Can the bridge puzzle be solved in 16 minutes?", category: "Algorithms & Optimization", replies: 18, rating: 4.7, time: "2h" },
@@ -166,6 +168,7 @@ export default function WavefrontApp() {
   const [authSending, setAuthSending] = useState(false);
   const [adminPuzzles, setAdminPuzzles] = useState<AdminPuzzle[]>([]);
   const [adminMembers, setAdminMembers] = useState<AdminMember[]>([]);
+  const [adminFeedback, setAdminFeedback] = useState<AdminFeedback[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminSelectedId, setAdminSelectedId] = useState<string | null>(null);
   const [adminPuzzleForm, setAdminPuzzleForm] = useState<AdminPuzzleForm | null>(null);
@@ -188,6 +191,8 @@ export default function WavefrontApp() {
   const [tipsError, setTipsError] = useState("");
   const [streakDays, setStreakDays] = useState(0);
   const [streakVersion, setStreakVersion] = useState(0);
+  const [realLeaders, setRealLeaders] = useState<RealLeader[]>([]);
+  const [leaderboardVersion, setLeaderboardVersion] = useState(0);
 
   useEffect(() => {
     if (!supabase) {
@@ -298,6 +303,11 @@ export default function WavefrontApp() {
     });
   }, [authUser?.id, dailyPointsVersion]);
 
+  useEffect(() => {
+    if (!supabase) return;
+    void supabase.rpc("puzzle_leaderboard").then(({ data }) => setRealLeaders((data ?? []) as RealLeader[]));
+  }, [authUser?.id, leaderboardVersion, dailyPointsVersion]);
+
   const fallbackAdminRecord = (puzzle: Puzzle): AdminPuzzle => ({
     id: puzzle.id, title: puzzle.title, path: categoryToPath[puzzle.category as (typeof categories)[number]["name"]],
     difficulty: puzzle.difficulty, expected_minutes: puzzle.time, access_level: "subscriber",
@@ -315,11 +325,12 @@ export default function WavefrontApp() {
   const loadAdminData = async () => {
     if (!supabase || !isAdmin) return;
     setAdminLoading(true);
-    const [catalogResult, profilesResult, subscriptionsResult, tipsResult] = await Promise.all([
+    const [catalogResult, profilesResult, subscriptionsResult, tipsResult, feedbackResult] = await Promise.all([
       supabase.from("puzzle_catalog").select("id,title,path,difficulty,expected_minutes,access_level,publication_status,payload,updated_at").order("updated_at", { ascending: false }),
       supabase.from("puzzle_profiles").select("user_id,display_name,created_at").order("created_at", { ascending: false }),
       supabase.from("puzzle_subscriptions").select("user_id,status,current_period_end"),
       supabase.from("puzzle_learning_tips").select("id,category,title,body,sort_order,publication_status").order("category").order("sort_order"),
+      supabase.from("puzzle_feedback").select("id,user_id,puzzle_id,issue_type,rating,note,created_at").order("created_at", { ascending: false }).limit(100),
     ]);
     if (catalogResult.data) {
       const persisted = new Map((catalogResult.data as AdminPuzzle[]).map((puzzle) => [puzzle.id, puzzle]));
@@ -330,6 +341,7 @@ export default function WavefrontApp() {
       setAdminMembers(profilesResult.data.map((profile) => ({ ...profile, subscription: subscriptions.get(profile.user_id) })));
     }
     if (tipsResult.data) setAdminTips(tipsResult.data as AdminTip[]);
+    if (feedbackResult.data) setAdminFeedback(feedbackResult.data as AdminFeedback[]);
     setAdminLoading(false);
   };
 
@@ -429,11 +441,10 @@ export default function WavefrontApp() {
     return choices.sort((a, b) => Math.abs(a.difficulty - target) - Math.abs(b.difficulty - target))[0] ?? livePuzzles[0];
   }, [livePuzzles, solvedIds, attemptedIds, adaptiveCategory, adaptiveLevels]);
 
-  const playerScore = Object.values(solvePoints).reduce((total, points) => total + points, 0) + dailyPoints;
   const leaderboard = useMemo(() => {
-    const you = authUser ? [{ name: authUser.email === "cbaforcat2017@gmail.com" ? "Bhanu" : "You", score: playerScore, accuracy: solvedIds.length ? 100 : 0, streak: 0, isCurrent: true }] : [];
-    return [...samplePlayers, ...you].sort((a, b) => b.score - a.score || b.accuracy - a.accuracy).map((player, index) => ({ ...player, rank: index + 1 }));
-  }, [authUser, playerScore, solvedIds.length]);
+    const real = realLeaders.map((player) => ({ name: player.display_name, score: Number(player.score), solved: Number(player.solved_count), streak: 0, isCurrent: player.user_id === authUser?.id }));
+    return [...samplePlayers, ...real].sort((a, b) => b.score - a.score || b.solved - a.solved).map((player, index) => ({ ...player, rank: index + 1 }));
+  }, [authUser?.id, realLeaders]);
   const leaders = leaderboard;
 
   const startPuzzle = (puzzle: Puzzle) => {
@@ -466,18 +477,21 @@ export default function WavefrontApp() {
     setSolvePoints((current) => ({ ...current, [activePuzzle.id]: points }));
     setMastery((current) => ({ ...current, [activePuzzle.category]: Math.min(100, (current[activePuzzle.category] ?? 0) + points) }));
     if (supabase && authUser) {
-      void supabase.from("puzzle_progress").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, attempts: 1, hints_used: revealedHints, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" }).then(() => setStreakVersion((version) => version + 1));
+      void Promise.all([
+        supabase.from("puzzle_progress").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, attempts: 1, hints_used: revealedHints, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" }),
+        supabase.from("puzzle_solve_scores").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, points, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" }),
+      ]).then(() => { setStreakVersion((version) => version + 1); setLeaderboardVersion((version) => version + 1); });
     }
   };
 
   const navigation: { id: View; label: string; glyph: string }[] = [
     { id: "solve", label: "Solve", glyph: "01" },
     { id: "daily", label: "Daily", glyph: "02" },
-    { id: "paths", label: "Paths", glyph: "03" },
-    { id: "tips", label: "Tips", glyph: "04" },
-    { id: "leaderboard", label: "Leaderboard", glyph: "05" },
-    { id: "community", label: "Community", glyph: "06" },
-    { id: "feedback", label: "Feedback", glyph: "07" },
+    { id: "feedback", label: "Feedback", glyph: "03" },
+    { id: "paths", label: "Paths", glyph: "04" },
+    { id: "tips", label: "Tips", glyph: "05" },
+    { id: "leaderboard", label: "Leaderboard", glyph: "06" },
+    { id: "community", label: "Community", glyph: "07" },
     ...(isAdmin ? [{ id: "admin" as View, label: "Admin", glyph: "08" }] : []),
   ];
 
@@ -970,12 +984,12 @@ export default function WavefrontApp() {
               ))}
             </div>
             <div className="leader-table">
-              <div className="leader-head"><span>Rank</span><span>Solver</span><span>Accuracy</span><span>Streak</span><span>Score</span></div>
+              <div className="leader-head"><span>Rank</span><span>Solver</span><span>Solved</span><span>Streak</span><span>Score</span></div>
               {leaders.map((leader) => (
                 <div className={leader.name === "You" ? "leader-row you" : "leader-row"} key={leader.name}>
                   <strong>#{leader.rank}</strong>
                   <span className="leader-person"><span>{leader.name.slice(0, 2).toUpperCase()}</span><strong>{leader.name}</strong></span>
-                  <span>{leader.accuracy}%</span><span>{leader.streak} days</span><strong>{leader.score.toLocaleString()}</strong>
+                  <span>{leader.solved}</span><span>{leader.streak} days</span><strong>{leader.score.toLocaleString()}</strong>
                 </div>
               ))}
             </div>
@@ -1040,6 +1054,10 @@ export default function WavefrontApp() {
             <section className="admin-panel member-panel">
               <div className="admin-panel-heading"><div><span className="eyebrow">Subscribers</span><h2>Access overview</h2></div><span>{adminMembers.length} signed-in members</span></div>
               <div className="member-table"><div className="member-head"><span>Member</span><span>Joined</span><span>Access</span><span>Pass ends</span></div>{adminMembers.map((member) => <div className="member-row" key={member.user_id}><span><strong>{member.display_name}</strong><small>{member.user_id.slice(0, 8)}</small></span><span>{new Date(member.created_at).toLocaleDateString("en-IN")}</span><span>{member.subscription?.status ?? "inactive"}</span><span>{member.subscription?.current_period_end ? new Date(member.subscription.current_period_end).toLocaleDateString("en-IN") : "-"}</span></div>)}</div>
+            </section>
+            <section className="admin-panel member-panel">
+              <div className="admin-panel-heading"><div><span className="eyebrow">Feedback inbox</span><h2>What solvers are telling you</h2></div><span>{adminFeedback.length} recent messages</span></div>
+              <div className="admin-list">{adminFeedback.length ? adminFeedback.map((item) => <article className="admin-feedback" key={item.id}><strong>{item.issue_type} {item.rating ? `· ${item.rating}/5` : ""}</strong><p>{item.note}</p><small>{item.puzzle_id === "site-feedback" ? "Site feedback" : item.puzzle_id} · {new Date(item.created_at).toLocaleDateString("en-IN")}</small></article>) : <p className="admin-empty">No feedback has arrived yet.</p>}</div>
             </section>
           </section>
         ) : (
