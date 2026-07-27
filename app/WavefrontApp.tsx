@@ -8,8 +8,13 @@ import { supabase } from "./supabase";
 
 const launchPuzzles = [...puzzlesData, ...launchExpansion];
 type Puzzle = (typeof launchPuzzles)[number];
-type View = "solve" | "paths" | "leaderboard" | "community" | "admin";
+type View = "solve" | "daily" | "paths" | "leaderboard" | "community" | "admin";
 type AccessPass = "monthly" | "annual";
+type DailyBrief = {
+  date: string | null;
+  lastUpdated: string | null;
+  puzzles: Array<{ difficulty: string; label: string; question: string; explanation: string }>;
+};
 type AdminPuzzle = {
   id: string;
   title: string;
@@ -113,6 +118,8 @@ export default function WavefrontApp() {
   const [adminPayloadText, setAdminPayloadText] = useState("");
   const [adminNotice, setAdminNotice] = useState("");
   const [contentOverrides, setContentOverrides] = useState<Record<string, Partial<Puzzle>>>({});
+  const [dailyBrief, setDailyBrief] = useState<DailyBrief | null>(null);
+  const [dailyBriefError, setDailyBriefError] = useState(false);
 
   useEffect(() => {
     if (!supabase) {
@@ -154,6 +161,22 @@ export default function WavefrontApp() {
       if (!data) return;
       setContentOverrides(Object.fromEntries(data.map((record) => [record.id, (record.payload ?? {}) as Partial<Puzzle>])));
     });
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/daily-brief")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Daily brief unavailable");
+        return response.json() as Promise<DailyBrief>;
+      })
+      .then((brief) => {
+        if (active) setDailyBrief(brief);
+      })
+      .catch(() => {
+        if (active) setDailyBriefError(true);
+      });
+    return () => { active = false; };
   }, []);
 
   const livePuzzles = useMemo(() => launchPuzzles.map((puzzle) => ({ ...puzzle, ...(contentOverrides[puzzle.id] ?? {}) })), [contentOverrides]);
@@ -241,10 +264,11 @@ export default function WavefrontApp() {
 
   const navigation: { id: View; label: string; glyph: string }[] = [
     { id: "solve", label: "Solve", glyph: "01" },
-    { id: "paths", label: "Paths", glyph: "02" },
-    { id: "leaderboard", label: "Leaderboard", glyph: "03" },
-    { id: "community", label: "Community", glyph: "04" },
-    ...(isAdmin ? [{ id: "admin" as View, label: "Admin", glyph: "05" }] : []),
+    { id: "daily", label: "Daily", glyph: "02" },
+    { id: "paths", label: "Paths", glyph: "03" },
+    { id: "leaderboard", label: "Leaderboard", glyph: "04" },
+    { id: "community", label: "Community", glyph: "05" },
+    ...(isAdmin ? [{ id: "admin" as View, label: "Admin", glyph: "06" }] : []),
   ];
 
   const changeView = (next: View) => {
@@ -600,6 +624,16 @@ export default function WavefrontApp() {
                 ))}
               </section>
             </div>
+          </section>
+        ) : view === "daily" ? (
+          <section className="standard-view daily-view">
+            <div className="page-heading split">
+              <div><span className="eyebrow">Live from Wavefront Daily</span><h1>Today&apos;s thinking break</h1><p>Three fresh prompts from today&apos;s edition. Read the brief and solve them on Wavefront Daily.</p></div>
+              <a className="daily-open-link" href="https://wavefrontdaily.in" target="_blank" rel="noreferrer">Open today&apos;s brief <span aria-hidden="true">→</span></a>
+            </div>
+            {dailyBrief?.date && <p className="daily-date">Edition for {new Date(`${dailyBrief.date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</p>}
+            {dailyBrief?.puzzles.length ? <div className="daily-puzzle-grid">{dailyBrief.puzzles.map((puzzle, index) => <article className={`daily-puzzle-card daily-${puzzle.difficulty.toLowerCase()}`} key={`${puzzle.label}-${index}`}><span>{puzzle.label}</span><strong>{String(index + 1).padStart(2, "0")}</strong><p>{puzzle.question}</p><a href="https://wavefrontdaily.in" target="_blank" rel="noreferrer">Solve with today&apos;s news <span aria-hidden="true">→</span></a></article>)}</div> : <div className="daily-empty"><strong>{dailyBriefError ? "Today&apos;s feed is taking a short break." : "Loading today&apos;s puzzles..."}</strong><p>Wavefront Daily will have the newest prompts ready shortly.</p><a href="https://wavefrontdaily.in" target="_blank" rel="noreferrer">Visit Wavefront Daily <span aria-hidden="true">→</span></a></div>}
+            <section className="daily-note"><span className="eyebrow">One source of truth</span><h2>Daily puzzles stay fresh without mixing memberships.</h2><p>Wavefront Daily owns the live news context, solutions, and article links. Wavefront Puzzles keeps your adaptive paths and weekly score separate.</p></section>
           </section>
         ) : view === "paths" ? (
           <section className="standard-view">

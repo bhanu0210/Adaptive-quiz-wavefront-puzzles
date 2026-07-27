@@ -29,6 +29,37 @@ const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
+    if (url.pathname === "/api/daily-brief") {
+      try {
+        const source = await fetch("https://wavefrontdaily.in/api/news", {
+          headers: { accept: "application/json" },
+          cf: { cacheTtl: 900, cacheEverything: true },
+        });
+        if (!source.ok) throw new Error(`Daily feed returned ${source.status}`);
+
+        const data = await source.json() as {
+          date?: string;
+          lastUpdated?: string;
+          puzzles?: Array<{ difficulty?: string; label?: string; question?: string; explanation?: string }>;
+        };
+        const puzzles = (data.puzzles ?? []).slice(0, 3).map((puzzle) => ({
+          difficulty: puzzle.difficulty ?? "daily",
+          label: puzzle.label ?? "Daily",
+          question: puzzle.question ?? "",
+          explanation: puzzle.explanation ?? "",
+        })).filter((puzzle) => puzzle.question);
+
+        return Response.json({ date: data.date ?? null, lastUpdated: data.lastUpdated ?? null, puzzles }, {
+          headers: { "Cache-Control": "public, max-age=900, s-maxage=900" },
+        });
+      } catch {
+        return Response.json({ date: null, lastUpdated: null, puzzles: [] }, {
+          status: 503,
+          headers: { "Cache-Control": "no-store" },
+        });
+      }
+    }
+
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
       return handleImageOptimization(request, {

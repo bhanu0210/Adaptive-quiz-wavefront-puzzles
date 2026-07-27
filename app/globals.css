@@ -724,6 +724,31 @@ select:focus-visible {
   margin: 0;
 }
 
+.daily-open-link,
+.daily-puzzle-card a,
+.daily-empty a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  background: var(--ink);
+  color: white;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.daily-date { margin: -18px 0 24px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.daily-puzzle-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.daily-puzzle-card { display: grid; align-content: start; gap: 15px; min-height: 310px; padding: 22px; border: 1px solid var(--line); border-top: 4px solid var(--blue); border-radius: 7px; background: var(--paper); }
+.daily-puzzle-card.daily-easy { border-top-color: var(--green); }.daily-puzzle-card.daily-moderate { border-top-color: var(--yellow); }.daily-puzzle-card.daily-tough { border-top-color: var(--coral); }
+.daily-puzzle-card > span { color: var(--muted); font-size: 10px; font-weight: 900; text-transform: uppercase; }.daily-puzzle-card > strong { color: var(--blue); font-family: Consolas, monospace; font-size: 13px; }.daily-puzzle-card p { margin: 0; color: var(--ink-soft); font-size: 14px; line-height: 1.6; }.daily-puzzle-card a { width: max-content; margin-top: auto; }
+.daily-empty { display: grid; gap: 8px; padding: 30px; border: 1px dashed var(--line-strong); border-radius: 7px; background: var(--paper); }.daily-empty p { margin: 0; color: var(--muted); font-size: 13px; }.daily-empty a { width: max-content; margin-top: 8px; }
+.daily-note { margin-top: 40px; padding: 24px 0; border-top: 1px solid var(--line); }.daily-note h2 { margin: 6px 0 8px; font-size: 20px; }.daily-note p { max-width: 680px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+
 .path-list {
   border-top: 1px solid var(--line-strong);
 }
@@ -1880,6 +1905,7 @@ select:focus-visible {
   }
 
   .path-grid,
+  .daily-puzzle-grid,
   .lower-grid,
   .solver-grid,
   .forum-layout {
