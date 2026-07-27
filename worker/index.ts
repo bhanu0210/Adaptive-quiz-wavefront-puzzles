@@ -40,13 +40,16 @@ const worker = {
         const data = await source.json() as {
           date?: string;
           lastUpdated?: string;
-          puzzles?: Array<{ difficulty?: string; label?: string; question?: string; explanation?: string }>;
+          puzzles?: Array<{ difficulty?: string; label?: string; question?: string; answer?: string; explanation?: string }>;
         };
+        const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
         const puzzles = (data.puzzles ?? []).slice(0, 3).map((puzzle) => ({
           difficulty: puzzle.difficulty ?? "daily",
           label: puzzle.label ?? "Daily",
           question: puzzle.question ?? "",
           explanation: puzzle.explanation ?? "",
+          // A Daily answer must be supported by its own explanation before it can award points.
+          verified: Boolean(puzzle.answer && puzzle.explanation && normalize(puzzle.explanation).includes(normalize(puzzle.answer))),
         })).filter((puzzle) => puzzle.question);
 
         return Response.json({ date: data.date ?? null, lastUpdated: data.lastUpdated ?? null, puzzles }, {

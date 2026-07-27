@@ -13,7 +13,7 @@ type AccessPass = "monthly" | "annual";
 type DailyBrief = {
   date: string | null;
   lastUpdated: string | null;
-  puzzles: Array<{ difficulty: string; label: string; question: string; explanation: string }>;
+  puzzles: Array<{ difficulty: string; label: string; question: string; explanation: string; verified?: boolean }>;
 };
 type AdminPuzzle = {
   id: string;
@@ -693,7 +693,14 @@ export default function WavefrontApp() {
     const { data, error } = await supabase.functions.invoke("solve-daily-puzzle", { body: { difficulty, answer } });
     setDailyChecking(null);
     if (error) {
-      setDailyNotices((current) => ({ ...current, [difficulty]: "That answer could not be checked. Please try once more." }));
+      let message = "That answer could not be checked. Please try once more.";
+      try {
+        const detail = await (error as { context?: { json?: () => Promise<{ error?: string }> } }).context?.json?.();
+        if (detail?.error) message = detail.error;
+      } catch {
+        // The generic message remains useful when the function response is unavailable.
+      }
+      setDailyNotices((current) => ({ ...current, [difficulty]: message }));
       return;
     }
     setDailyNotices((current) => ({ ...current, [difficulty]: data?.message ?? "Answer checked." }));
@@ -911,7 +918,8 @@ export default function WavefrontApp() {
               const reward = puzzle.difficulty === "easy" ? 20 : puzzle.difficulty === "moderate" ? 50 : 100;
               const solved = dailySolved[puzzle.difficulty];
               const attempted = dailyAttempted[puzzle.difficulty];
-              return <article className={`daily-puzzle-card daily-${puzzle.difficulty.toLowerCase()}`} key={`${puzzle.label}-${index}`}><span>{puzzle.label}</span><strong>{String(index + 1).padStart(2, "0")} · {reward} pts</strong><p>{puzzle.question}</p>{hasActivePass ? <div className="daily-answer"><input aria-label={`Answer for ${puzzle.label}`} value={dailyAnswers[puzzle.difficulty] ?? ""} onChange={(event) => setDailyAnswers((current) => ({ ...current, [puzzle.difficulty]: event.target.value }))} disabled={attempted} placeholder={attempted ? "Answer checked" : "Your answer"} /><button disabled={attempted || dailyChecking === puzzle.difficulty} onClick={() => void submitDailyAnswer(puzzle.difficulty)}>{solved ? "Points earned" : attempted ? "Solution revealed" : dailyChecking === puzzle.difficulty ? "Checking..." : `Check for ${reward} pts`}</button>{dailyNotices[puzzle.difficulty] && <small className={solved ? "daily-notice success" : "daily-notice"}>{dailyNotices[puzzle.difficulty]}</small>}{attempted && <p className="daily-explanation"><strong>Solution</strong>{puzzle.explanation}</p>}</div> : <button className="daily-unlock" onClick={() => setShowSubscribe(true)}>Unlock daily solve · {reward} pts</button>}<a href="https://wavefrontdaily.in" target="_blank" rel="noreferrer">Read today&apos;s brief <span aria-hidden="true">→</span></a></article>;
+              const canSolve = puzzle.verified !== false;
+              return <article className={`daily-puzzle-card daily-${puzzle.difficulty.toLowerCase()}`} key={`${puzzle.label}-${index}`}><span>{puzzle.label}</span><strong>{String(index + 1).padStart(2, "0")} · {reward} pts</strong><p>{puzzle.question}</p>{!canSolve ? <div className="daily-review"><strong>Verification in progress</strong><small>This prompt is visible, but scoring is paused until its solution passes the quality check.</small></div> : hasActivePass ? <div className="daily-answer"><input aria-label={`Answer for ${puzzle.label}`} value={dailyAnswers[puzzle.difficulty] ?? ""} onChange={(event) => setDailyAnswers((current) => ({ ...current, [puzzle.difficulty]: event.target.value }))} disabled={attempted} placeholder={attempted ? "Answer checked" : "Your answer"} /><button disabled={attempted || dailyChecking === puzzle.difficulty} onClick={() => void submitDailyAnswer(puzzle.difficulty)}>{solved ? "Points earned" : attempted ? "Solution revealed" : dailyChecking === puzzle.difficulty ? "Checking..." : `Check for ${reward} pts`}</button>{dailyNotices[puzzle.difficulty] && <small className={solved ? "daily-notice success" : "daily-notice"}>{dailyNotices[puzzle.difficulty]}</small>}{attempted && <p className="daily-explanation"><strong>Solution</strong>{puzzle.explanation}</p>}</div> : <button className="daily-unlock" onClick={() => setShowSubscribe(true)}>Unlock daily solve · {reward} pts</button>}<a href="https://wavefrontdaily.in" target="_blank" rel="noreferrer">Read today&apos;s brief <span aria-hidden="true">→</span></a></article>;
             })}</div> : <div className="daily-empty"><strong>{dailyBriefError ? "Today&apos;s feed is taking a short break." : "Loading today&apos;s puzzles..."}</strong><p>Wavefront Daily will have the newest prompts ready shortly.</p><a href="https://wavefrontdaily.in" target="_blank" rel="noreferrer">Visit Wavefront Daily <span aria-hidden="true">→</span></a></div>}
             <section className="daily-note"><span className="eyebrow">Daily score</span><h2>Your Daily points count on this leaderboard.</h2><p>Easy, moderate, and tough prompts award 20, 50, and 100 points. Each can be earned once per day, and only after a correct subscriber solve.</p></section>
           </section>
