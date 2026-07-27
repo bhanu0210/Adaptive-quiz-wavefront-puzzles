@@ -30,7 +30,7 @@ test("server-renders the Wavefront Puzzles product", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Wavefront Puzzles \| Adaptive reasoning challenges<\/title>/i);
-  assert.match(html, /Good morning, Bhanu/);
+  assert.match(html, /Keep your mind in motion/);
   assert.match(html, /Adaptive paths/);
   assert.match(html, /Read Wavefront Daily/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);

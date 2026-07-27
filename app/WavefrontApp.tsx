@@ -37,13 +37,12 @@ const categories = [
   { name: "Patterns & Numbers", code: "PN", color: "cyan", mastery: 53 },
 ] as const;
 
-const leaders = [
-  { rank: 1, name: "Meera S.", score: 4820, streak: 28, accuracy: 94 },
-  { rank: 2, name: "Arjun Rao", score: 4610, streak: 19, accuracy: 91 },
-  { rank: 3, name: "Kabir M.", score: 4385, streak: 22, accuracy: 89 },
-  { rank: 4, name: "Naina J.", score: 4120, streak: 14, accuracy: 92 },
-  { rank: 5, name: "You", score: 3680, streak: 7, accuracy: 86 },
-];
+const samplePlayers = [
+  ["Ananya P.", 3480, 88], ["Rohan S.", 3310, 86], ["Meera K.", 3180, 91], ["Vikram N.", 3010, 84], ["Sana M.", 2840, 89],
+  ["Arjun D.", 2690, 82], ["Kavya R.", 2520, 87], ["Ishaan G.", 2380, 80], ["Priya L.", 2210, 85], ["Dev A.", 2050, 79],
+  ["Neha V.", 1880, 83], ["Rahul T.", 1710, 78], ["Zoya F.", 1540, 81], ["Aman B.", 1360, 76], ["Mira C.", 1190, 80],
+  ["Kabir J.", 1010, 74], ["Tara H.", 830, 77], ["Nikhil W.", 650, 72], ["Diya E.", 420, 75], ["Om P.", 240, 70],
+].map(([name, score, accuracy]) => ({ name: name as string, score: score as number, accuracy: accuracy as number, streak: 0 }));
 
 const seedPosts = [
   { id: 1, initials: "AK", author: "Aarav K.", title: "Can the bridge puzzle be solved in 16 minutes?", category: "Algorithms & Optimization", replies: 18, rating: 4.7, time: "2h" },
@@ -86,8 +85,9 @@ export default function WavefrontApp() {
   const [submitted, setSubmitted] = useState(false);
   const [revealedHints, setRevealedHints] = useState(0);
   const [solvedIds, setSolvedIds] = useState<string[]>([]);
+  const [solvePoints, setSolvePoints] = useState<Record<string, number>>({});
   const [mastery, setMastery] = useState<Record<string, number>>(
-    Object.fromEntries(categories.map((category) => [category.name, category.mastery])),
+    Object.fromEntries(categories.map((category) => [category.name, 0])),
   );
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [selectedPass, setSelectedPass] = useState<AccessPass>("monthly");
@@ -209,6 +209,13 @@ export default function WavefrontApp() {
     return unsolved.sort((a, b) => (mastery[a.category] ?? 50) - (mastery[b.category] ?? 50))[0] ?? livePuzzles[0];
   }, [livePuzzles, mastery, solvedIds]);
 
+  const playerScore = Object.values(solvePoints).reduce((total, points) => total + points, 0);
+  const leaderboard = useMemo(() => {
+    const you = authUser ? [{ name: authUser.email === "cbaforcat2017@gmail.com" ? "Bhanu" : "You", score: playerScore, accuracy: solvedIds.length ? 100 : 0, streak: 0, isCurrent: true }] : [];
+    return [...samplePlayers, ...you].sort((a, b) => b.score - a.score || b.accuracy - a.accuracy).map((player, index) => ({ ...player, rank: index + 1 }));
+  }, [authUser, playerScore, solvedIds.length]);
+  const leaders = leaderboard;
+
   const startPuzzle = (puzzle: Puzzle) => {
     setActivePuzzle(puzzle);
     setSelectedOption(null);
@@ -221,13 +228,14 @@ export default function WavefrontApp() {
   const submitAnswer = () => {
     if (selectedOption === null || !activePuzzle) return;
     setSubmitted(true);
-    if (solvedIds.includes(activePuzzle.id)) return;
-    setSolvedIds((current) => [...current, activePuzzle.id]);
     const correct = selectedOption === activePuzzle.correctOption;
-    const gain = correct ? Math.max(3, 7 - revealedHints) : 2;
+    if (!correct || solvedIds.includes(activePuzzle.id)) return;
+    const points = Math.max(40, 100 - revealedHints * 15);
+    setSolvedIds((current) => [...current, activePuzzle.id]);
+    setSolvePoints((current) => ({ ...current, [activePuzzle.id]: points }));
     setMastery((current) => ({
       ...current,
-      [activePuzzle.category]: Math.min(100, (current[activePuzzle.category] ?? 50) + gain),
+      [activePuzzle.category]: Math.min(100, (current[activePuzzle.category] ?? 0) + points),
     }));
   };
 
@@ -537,11 +545,11 @@ export default function WavefrontApp() {
         ) : view === "solve" ? (
           <section className="dashboard-view">
             <div className="welcome-row">
-              <div><span className="eyebrow">Sunday, 26 July</span><h1>Good morning, Bhanu.</h1><p>Your weakest signal is optimization. Today&apos;s set starts there.</p></div>
+              <div><span className="eyebrow">New verified puzzles every week</span><h1>Keep your mind in motion.</h1><p>Choose one challenge at a time in Solve. Your score grows only from correct solves.</p></div>
               <div className="stat-strip" aria-label="Your performance">
-                <div><strong>86%</strong><span>Accuracy</span></div>
-                <div><strong>42</strong><span>Solved</span></div>
-                <div><strong>Top 18%</strong><span>Rank</span></div>
+                <div><strong>{solvedIds.length ? "100%" : "-"}</strong><span>Accuracy</span></div>
+                <div><strong>{solvedIds.length}</strong><span>Solved</span></div>
+                <div><strong>{authUser ? `#${leaderboard.find((player) => "isCurrent" in player)?.rank ?? "-"}` : "-"}</strong><span>Rank</span></div>
               </div>
             </div>
             <div className="adaptive-feature">
@@ -563,7 +571,7 @@ export default function WavefrontApp() {
                 const categoryPuzzles = livePuzzles.filter((puzzle) => puzzle.category === category.name);
                 const next = categoryPuzzles.find((puzzle) => !solvedIds.includes(puzzle.id)) ?? categoryPuzzles[0];
                 return (
-                  <button className={`path-card ${category.color}`} key={category.name} onClick={() => startPuzzle(next)}>
+                  <button className={`path-card ${category.color}`} key={category.name} onClick={() => setView("paths")}>
                     <div className="path-topline"><span className="path-code">{category.code}</span><span>{categoryPuzzles.length} verified</span></div>
                     <h3>{category.name}</h3>
                     <div className="path-progress"><span style={{ width: `${mastery[category.name]}%` }} /></div>
@@ -595,7 +603,7 @@ export default function WavefrontApp() {
           </section>
         ) : view === "paths" ? (
           <section className="standard-view">
-            <div className="page-heading"><span className="eyebrow">Your curriculum</span><h1>Adaptive paths</h1><p>Each result reshapes what comes next.</p></div>
+            <div className="page-heading"><span className="eyebrow">Weekly curriculum preview</span><h1>Adaptive paths</h1><p>Explore each track here. Solve challenges only from the Solve section.</p></div>
             <div className="path-list">
               {categories.map((category, categoryIndex) => {
                 const categoryPuzzles = livePuzzles.filter((puzzle) => puzzle.category === category.name);
@@ -608,10 +616,10 @@ export default function WavefrontApp() {
                     </div>
                     <div className="path-puzzles">
                       {categoryPuzzles.map((puzzle, index) => (
-                        <button key={puzzle.id} onClick={() => startPuzzle(puzzle)}>
+                        <div key={puzzle.id}>
                           <span className={solvedIds.includes(puzzle.id) ? "puzzle-dot solved" : "puzzle-dot"}>{solvedIds.includes(puzzle.id) ? "✓" : index + 1}</span>
                           <span><strong>{puzzle.title}</strong><small>{difficultyLabel(puzzle.difficulty)} · {puzzle.time} min</small></span><span aria-hidden="true">→</span>
-                        </button>
+                        </div>
                       ))}
                     </div>
                   </section>
