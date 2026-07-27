@@ -488,7 +488,6 @@ export default function WavefrontApp() {
     { id: "solve", label: "Solve", glyph: "01" },
     { id: "daily", label: "Daily", glyph: "02" },
     { id: "feedback", label: "Feedback", glyph: "03" },
-    { id: "paths", label: "Paths", glyph: "04" },
     { id: "tips", label: "Tips", glyph: "05" },
     { id: "leaderboard", label: "Leaderboard", glyph: "06" },
     { id: "community", label: "Community", glyph: "07" },
@@ -882,24 +881,6 @@ export default function WavefrontApp() {
               </div>
               <SignalField />
               <div className="feature-score"><span>Next level</span><strong>{adaptiveLevels[recommendedPuzzle.category] ?? 3}/5</strong></div>
-            </div>
-            <div className="section-heading">
-              <div><span className="eyebrow">Adaptive paths</span><h2>Choose a thinking mode</h2></div>
-              <button className="text-action" onClick={() => setView("paths")}>View all paths →</button>
-            </div>
-            <div className="path-grid">
-              {categories.map((category) => {
-                const categoryPuzzles = livePuzzles.filter((puzzle) => puzzle.category === category.name);
-                const next = categoryPuzzles.find((puzzle) => !solvedIds.includes(puzzle.id)) ?? categoryPuzzles[0];
-                return (
-                  <button className={`path-card ${category.color}`} key={category.name} onClick={() => setView("paths")}>
-                    <div className="path-topline"><span className="path-code">{category.code}</span><span>{categoryPuzzles.length} verified</span></div>
-                    <h3>{category.name}</h3>
-                    <div className="path-progress"><span style={{ width: `${mastery[category.name]}%` }} /></div>
-                    <div className="path-footer"><span>{mastery[category.name]}% mastery</span><span aria-hidden="true">→</span></div>
-                  </button>
-                );
-              })}
             </div>
             <div className="lower-grid">
               <section className="activity-panel">
