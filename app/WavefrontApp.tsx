@@ -48,6 +48,25 @@ const categories = [
 
 type LearningTip = { id: string; category: string; title: string; body: string; sort_order: number };
 
+function completePuzzlePayload(id: string, stored: Partial<Puzzle>) {
+  const source = launchPuzzles.find((puzzle) => puzzle.id === id);
+  if (!source) return stored;
+  const usableOptions = Array.isArray(stored.options) && stored.options.length === 4 && stored.options.every((option) => typeof option === "string" && option.trim());
+  const usableHints = Array.isArray(stored.hints) && stored.hints.length === 3 && stored.hints.every((hint) => typeof hint === "string" && hint.trim());
+  return {
+    ...source,
+    ...stored,
+    title: stored.title?.trim() ? stored.title : source.title,
+    category: stored.category?.trim() ? stored.category : source.category,
+    question: stored.question?.trim() ? stored.question : source.question,
+    options: usableOptions ? stored.options : source.options,
+    correctOption: Number.isInteger(stored.correctOption) && stored.correctOption >= 0 && stored.correctOption < 4 ? stored.correctOption : source.correctOption,
+    hints: usableHints ? stored.hints : source.hints,
+    explanation: stored.explanation?.trim() ? stored.explanation : source.explanation,
+    takeaway: stored.takeaway?.trim() ? stored.takeaway : source.takeaway,
+  } as Puzzle;
+}
+
 const categoryToPath: Record<(typeof categories)[number]["name"], string> = {
   "Logic & Knowledge": "logic-knowledge", "Mathematical Reasoning": "mathematical-reasoning", "Probability & Strategy": "probability-strategy",
   "Algorithms & Optimization": "algorithms-optimization", "Spatial Reasoning": "spatial-reasoning", "Patterns & Numbers": "patterns-numbers",
@@ -208,7 +227,7 @@ export default function WavefrontApp() {
     if (!supabase) return;
     void supabase.from("puzzle_catalog").select("id,payload").eq("publication_status", "published").then(({ data }) => {
       if (!data) return;
-      setContentOverrides(Object.fromEntries(data.map((record) => [record.id, (record.payload ?? {}) as Partial<Puzzle>])));
+      setContentOverrides(Object.fromEntries(data.map((record) => [record.id, completePuzzlePayload(record.id, (record.payload ?? {}) as Partial<Puzzle>)])));
     });
   }, []);
 
@@ -317,7 +336,7 @@ export default function WavefrontApp() {
   useEffect(() => { void loadAdminData(); }, [authUser?.id]);
 
   const selectAdminPuzzle = (puzzle: AdminPuzzle) => {
-    const payload = puzzle.payload as Partial<Puzzle>;
+    const payload = completePuzzlePayload(puzzle.id, puzzle.payload as Partial<Puzzle>);
     setAdminSelectedId(puzzle.id);
     setAdminPuzzleForm({
       title: payload.title ?? puzzle.title, category: payload.category ?? pathToCategory(puzzle.path), difficulty: payload.difficulty ?? puzzle.difficulty,
