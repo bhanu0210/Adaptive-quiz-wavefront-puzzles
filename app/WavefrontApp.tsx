@@ -8,7 +8,7 @@ import { supabase } from "./supabase";
 
 const launchPuzzles = [...puzzlesData, ...launchExpansion];
 type Puzzle = (typeof launchPuzzles)[number];
-type View = "solve" | "daily" | "paths" | "tips" | "leaderboard" | "community" | "admin";
+type View = "solve" | "daily" | "paths" | "tips" | "leaderboard" | "community" | "feedback" | "admin";
 type AccessPass = "monthly" | "annual";
 type DailyBrief = {
   date: string | null;
@@ -477,7 +477,8 @@ export default function WavefrontApp() {
     { id: "tips", label: "Tips", glyph: "04" },
     { id: "leaderboard", label: "Leaderboard", glyph: "05" },
     { id: "community", label: "Community", glyph: "06" },
-    ...(isAdmin ? [{ id: "admin" as View, label: "Admin", glyph: "07" }] : []),
+    { id: "feedback", label: "Feedback", glyph: "07" },
+    ...(isAdmin ? [{ id: "admin" as View, label: "Admin", glyph: "08" }] : []),
   ];
 
   const changeView = (next: View) => {
@@ -651,8 +652,8 @@ export default function WavefrontApp() {
     if (error) setAuthMessage("Your rating could not be saved yet. Please try again.");
   };
 
-  const submitFeedback = async () => {
-    if (!activePuzzle || !authUser || !supabase) {
+  const submitFeedback = async (puzzleId = activePuzzle?.id ?? "site-feedback") => {
+    if (!authUser || !supabase) {
       setFeedbackNotice("Sign in to send feedback.");
       setShowAuth(true);
       return;
@@ -663,7 +664,7 @@ export default function WavefrontApp() {
       return;
     }
     const { error } = await supabase.from("puzzle_feedback").insert({
-      user_id: authUser.id, puzzle_id: activePuzzle.id, issue_type: feedbackType, rating, note,
+      user_id: authUser.id, puzzle_id: puzzleId, issue_type: feedbackType, rating, note,
     });
     if (error) {
       setFeedbackNotice("Feedback could not be sent yet. Please try again.");
@@ -958,7 +959,7 @@ export default function WavefrontApp() {
           <section className="standard-view">
             <div className="page-heading split">
               <div><span className="eyebrow">Season 08 · Week 2</span><h1>Leaderboard</h1><p>Verified solves, accuracy, and hint efficiency.</p></div>
-              <div className="rank-callout"><span>Your global position</span><strong>#184</strong><small>Top 18%</small></div>
+              <div className="rank-callout"><span>{authUser ? "Your position in this board" : "Current board"}</span><strong>{authUser ? `#${leaderboard.find((player) => "isCurrent" in player)?.rank ?? "-"}` : samplePlayers.length}</strong><small>{authUser ? `among ${leaderboard.length} listed solvers` : "20 seeded solvers"}</small></div>
             </div>
             <div className="podium">
               {[leaders[1], leaders[0], leaders[2]].map((leader, index) => (
@@ -977,6 +978,16 @@ export default function WavefrontApp() {
                   <span>{leader.accuracy}%</span><span>{leader.streak} days</span><strong>{leader.score.toLocaleString()}</strong>
                 </div>
               ))}
+            </div>
+          </section>
+        ) : view === "feedback" ? (
+          <section className="standard-view feedback-view">
+            <div className="page-heading"><span className="eyebrow">Direct line to the editor</span><h1>Help improve Wavefront</h1><p>Flag an unclear question, a solution concern, a difficulty mismatch, or a site idea. Puzzle-specific feedback is also available after every solved challenge.</p></div>
+            <div className="feedback-box feedback-page-box">
+              <strong>What would you like to share?</strong>
+              <div className="feedback-fields"><select aria-label="Feedback type" value={feedbackType} onChange={(event) => setFeedbackType(event.target.value as FeedbackKind)}><option value="general">General feedback</option><option value="unclear">Something was unclear</option><option value="incorrect">Possible solution issue</option><option value="difficulty">Difficulty felt off</option><option value="suggestion">Suggestion</option></select><textarea value={feedbackNote} onChange={(event) => setFeedbackNote(event.target.value)} placeholder="Tell us what you noticed or what would make the experience better." maxLength={3000} /></div>
+              <button className="primary-action small" onClick={() => void submitFeedback("site-feedback")}>Send feedback</button>
+              {feedbackNotice && <small className="feedback-notice">{feedbackNotice}</small>}
             </div>
           </section>
         ) : view === "admin" ? (
