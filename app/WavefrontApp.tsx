@@ -30,6 +30,7 @@ type AdminMember = { user_id: string; display_name: string; created_at: string; 
 type AdminTip = LearningTip & { publication_status: "draft" | "published" | "archived" };
 type AdminPuzzleForm = { title: string; category: string; difficulty: number; time: number; question: string; options: string[]; correctOption: number; hints: string[]; explanation: string; takeaway: string; publication_status: "draft" | "published" };
 type AdminTipForm = { category: string; title: string; body: string; sort_order: number; publication_status: "draft" | "published" | "archived" };
+type FeedbackKind = "general" | "unclear" | "incorrect" | "difficulty" | "suggestion";
 
 const accessPasses: Record<AccessPass, { name: string; price: string; duration: string; description: string }> = {
   monthly: { name: "30-Day Pass", price: "₹99", duration: "30 days", description: "Full access for one month" },
@@ -130,6 +131,9 @@ export default function WavefrontApp() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [accessUntil, setAccessUntil] = useState<string | null>(null);
   const [rating, setRating] = useState<number | null>(null);
+  const [feedbackType, setFeedbackType] = useState<FeedbackKind>("general");
+  const [feedbackNote, setFeedbackNote] = useState("");
+  const [feedbackNotice, setFeedbackNotice] = useState("");
   const [posts, setPosts] = useState(seedPosts);
   const [showPostForm, setShowPostForm] = useState(false);
   const [postTitle, setPostTitle] = useState("");
@@ -153,6 +157,12 @@ export default function WavefrontApp() {
   const [contentOverrides, setContentOverrides] = useState<Record<string, Partial<Puzzle>>>({});
   const [dailyBrief, setDailyBrief] = useState<DailyBrief | null>(null);
   const [dailyBriefError, setDailyBriefError] = useState(false);
+  const [dailyAnswers, setDailyAnswers] = useState<Record<string, string>>({});
+  const [dailyNotices, setDailyNotices] = useState<Record<string, string>>({});
+  const [dailySolved, setDailySolved] = useState<Record<string, boolean>>({});
+  const [dailyChecking, setDailyChecking] = useState<string | null>(null);
+  const [dailyPoints, setDailyPoints] = useState(0);
+  const [dailyPointsVersion, setDailyPointsVersion] = useState(0);
   const [learningTips, setLearningTips] = useState<LearningTip[]>([]);
   const [tipsLoading, setTipsLoading] = useState(false);
   const [tipsError, setTipsError] = useState("");
@@ -248,6 +258,21 @@ export default function WavefrontApp() {
     void supabase.from("puzzle_progress").select("solved_at").eq("user_id", authUser.id).not("solved_at", "is", null)
       .then(({ data }) => setStreakDays(calculateStreak((data ?? []).flatMap((row) => row.solved_at ? [row.solved_at] : []))));
   }, [authUser?.id, streakVersion]);
+
+  useEffect(() => {
+    if (!supabase || !authUser) {
+      setDailyPoints(0);
+      setDailySolved({});
+      return;
+    }
+    void supabase.from("puzzle_daily_points").select("puzzle_date,difficulty,points").eq("user_id", authUser.id)
+      .then(({ data }) => {
+        const rows = data ?? [];
+        setDailyPoints(rows.reduce((total, row) => total + Number(row.points ?? 0), 0));
+        const today = indiaDateKey(new Date());
+        setDailySolved(Object.fromEntries(rows.filter((row) => row.puzzle_date === today).map((row) => [row.difficulty, true])));
+      });
+  }, [authUser?.id, dailyPointsVersion]);
 
   const fallbackAdminRecord = (puzzle: Puzzle): AdminPuzzle => ({
     id: puzzle.id, title: puzzle.title, path: categoryToPath[puzzle.category as (typeof categories)[number]["name"]],
@@ -380,7 +405,7 @@ export default function WavefrontApp() {
     return choices.sort((a, b) => Math.abs(a.difficulty - target) - Math.abs(b.difficulty - target))[0] ?? livePuzzles[0];
   }, [livePuzzles, solvedIds, attemptedIds, adaptiveCategory, adaptiveLevels]);
 
-  const playerScore = Object.values(solvePoints).reduce((total, points) => total + points, 0);
+  const playerScore = Object.values(solvePoints).reduce((total, points) => total + points, 0) + dailyPoints;
   const leaderboard = useMemo(() => {
     const you = authUser ? [{ name: authUser.email === "cbaforcat2017@gmail.com" ? "Bhanu" : "You", score: playerScore, accuracy: solvedIds.length ? 100 : 0, streak: 0, isCurrent: true }] : [];
     return [...samplePlayers, ...you].sort((a, b) => b.score - a.score || b.accuracy - a.accuracy).map((player, index) => ({ ...player, rank: index + 1 }));
@@ -393,6 +418,9 @@ export default function WavefrontApp() {
     setSubmitted(false);
     setRevealedHints(0);
     setRating(null);
+    setFeedbackType("general");
+    setFeedbackNote("");
+    setFeedbackNotice("");
     setView("solve");
   };
 
@@ -599,6 +627,58 @@ export default function WavefrontApp() {
     if (error) setAuthMessage("Your rating could not be saved yet. Please try again.");
   };
 
+  const submitFeedback = async () => {
+    if (!activePuzzle || !authUser || !supabase) {
+      setFeedbackNotice("Sign in to send feedback.");
+      setShowAuth(true);
+      return;
+    }
+    const note = feedbackNote.trim();
+    if (note.length < 3) {
+      setFeedbackNotice("Please add a short note so we know what to improve.");
+      return;
+    }
+    const { error } = await supabase.from("puzzle_feedback").insert({
+      user_id: authUser.id, puzzle_id: activePuzzle.id, issue_type: feedbackType, rating, note,
+    });
+    if (error) {
+      setFeedbackNotice("Feedback could not be sent yet. Please try again.");
+      return;
+    }
+    setFeedbackNote("");
+    setFeedbackNotice("Thank you. Your feedback is now in the editor queue.");
+  };
+
+  const submitDailyAnswer = async (difficulty: string) => {
+    if (!authUser) {
+      setAuthMessage("Sign in to solve today’s prompts.");
+      setShowAuth(true);
+      return;
+    }
+    if (!hasActivePass) {
+      setShowSubscribe(true);
+      return;
+    }
+    if (!supabase) return;
+    const answer = dailyAnswers[difficulty]?.trim();
+    if (!answer) {
+      setDailyNotices((current) => ({ ...current, [difficulty]: "Enter an answer first." }));
+      return;
+    }
+    setDailyChecking(difficulty);
+    const { data, error } = await supabase.functions.invoke("solve-daily-puzzle", { body: { difficulty, answer } });
+    setDailyChecking(null);
+    if (error) {
+      setDailyNotices((current) => ({ ...current, [difficulty]: "That answer could not be checked. Please try once more." }));
+      return;
+    }
+    setDailyNotices((current) => ({ ...current, [difficulty]: data?.message ?? "Answer checked." }));
+    if (data?.correct) {
+      setDailySolved((current) => ({ ...current, [difficulty]: true }));
+      setDailyPointsVersion((version) => version + 1);
+    }
+  };
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -693,6 +773,17 @@ export default function WavefrontApp() {
                         ))}
                       </div>
                     </div>
+                    <div className="feedback-box">
+                      <strong>Help improve this puzzle</strong>
+                      <div className="feedback-fields">
+                        <select aria-label="Feedback type" value={feedbackType} onChange={(event) => setFeedbackType(event.target.value as FeedbackKind)}>
+                          <option value="general">General feedback</option><option value="unclear">Something was unclear</option><option value="incorrect">Possible solution issue</option><option value="difficulty">Difficulty felt off</option><option value="suggestion">Suggestion</option>
+                        </select>
+                        <textarea value={feedbackNote} onChange={(event) => setFeedbackNote(event.target.value)} placeholder="What should we improve?" maxLength={3000} />
+                      </div>
+                      <button className="feedback-send" onClick={() => void submitFeedback()}>Send feedback</button>
+                      {feedbackNotice && <small className="feedback-notice">{feedbackNotice}</small>}
+                    </div>
                     <button className="next-action" onClick={() => startPuzzle(recommendedPuzzle)}>Next adaptive puzzle <span aria-hidden="true">→</span></button>
                   </div>
                 )}
@@ -785,12 +876,16 @@ export default function WavefrontApp() {
         ) : view === "daily" ? (
           <section className="standard-view daily-view">
             <div className="page-heading split">
-              <div><span className="eyebrow">Live from Wavefront Daily</span><h1>Today&apos;s thinking break</h1><p>Three fresh prompts from today&apos;s edition. Read the brief and solve them on Wavefront Daily.</p></div>
+              <div><span className="eyebrow">Live from Wavefront Daily</span><h1>Today&apos;s thinking break</h1><p>Three fresh prompts from today&apos;s edition. Solve here to earn points, then explore the brief for context.</p></div>
               <a className="daily-open-link" href="https://wavefrontdaily.in" target="_blank" rel="noreferrer">Open today&apos;s brief <span aria-hidden="true">→</span></a>
             </div>
             {dailyBrief?.date && <p className="daily-date">Edition for {new Date(`${dailyBrief.date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</p>}
-            {dailyBrief?.puzzles.length ? <div className="daily-puzzle-grid">{dailyBrief.puzzles.map((puzzle, index) => <article className={`daily-puzzle-card daily-${puzzle.difficulty.toLowerCase()}`} key={`${puzzle.label}-${index}`}><span>{puzzle.label}</span><strong>{String(index + 1).padStart(2, "0")}</strong><p>{puzzle.question}</p><a href="https://wavefrontdaily.in" target="_blank" rel="noreferrer">Solve with today&apos;s news <span aria-hidden="true">→</span></a></article>)}</div> : <div className="daily-empty"><strong>{dailyBriefError ? "Today&apos;s feed is taking a short break." : "Loading today&apos;s puzzles..."}</strong><p>Wavefront Daily will have the newest prompts ready shortly.</p><a href="https://wavefrontdaily.in" target="_blank" rel="noreferrer">Visit Wavefront Daily <span aria-hidden="true">→</span></a></div>}
-            <section className="daily-note"><span className="eyebrow">One source of truth</span><h2>Daily puzzles stay fresh without mixing memberships.</h2><p>Wavefront Daily owns the live news context, solutions, and article links. Wavefront Puzzles keeps your adaptive paths and weekly score separate.</p></section>
+            {dailyBrief?.puzzles.length ? <div className="daily-puzzle-grid">{dailyBrief.puzzles.map((puzzle, index) => {
+              const reward = puzzle.difficulty === "easy" ? 20 : puzzle.difficulty === "moderate" ? 50 : 100;
+              const solved = dailySolved[puzzle.difficulty];
+              return <article className={`daily-puzzle-card daily-${puzzle.difficulty.toLowerCase()}`} key={`${puzzle.label}-${index}`}><span>{puzzle.label}</span><strong>{String(index + 1).padStart(2, "0")} · {reward} pts</strong><p>{puzzle.question}</p>{hasActivePass ? <div className="daily-answer"><input aria-label={`Answer for ${puzzle.label}`} value={dailyAnswers[puzzle.difficulty] ?? ""} onChange={(event) => setDailyAnswers((current) => ({ ...current, [puzzle.difficulty]: event.target.value }))} disabled={solved} placeholder={solved ? "Solved" : "Your answer"} /><button disabled={solved || dailyChecking === puzzle.difficulty} onClick={() => void submitDailyAnswer(puzzle.difficulty)}>{solved ? "Points earned" : dailyChecking === puzzle.difficulty ? "Checking..." : `Check for ${reward} pts`}</button>{dailyNotices[puzzle.difficulty] && <small className={solved ? "daily-notice success" : "daily-notice"}>{dailyNotices[puzzle.difficulty]}</small>}{solved && <p className="daily-explanation">{puzzle.explanation}</p>}</div> : <button className="daily-unlock" onClick={() => setShowSubscribe(true)}>Unlock daily solve · {reward} pts</button>}<a href="https://wavefrontdaily.in" target="_blank" rel="noreferrer">Read today&apos;s brief <span aria-hidden="true">→</span></a></article>;
+            })}</div> : <div className="daily-empty"><strong>{dailyBriefError ? "Today&apos;s feed is taking a short break." : "Loading today&apos;s puzzles..."}</strong><p>Wavefront Daily will have the newest prompts ready shortly.</p><a href="https://wavefrontdaily.in" target="_blank" rel="noreferrer">Visit Wavefront Daily <span aria-hidden="true">→</span></a></div>}
+            <section className="daily-note"><span className="eyebrow">Daily score</span><h2>Your Daily points count on this leaderboard.</h2><p>Easy, moderate, and tough prompts award 20, 50, and 100 points. Each can be earned once per day, and only after a correct subscriber solve.</p></section>
           </section>
         ) : view === "paths" ? (
           <section className="standard-view">
