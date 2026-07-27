@@ -5,6 +5,10 @@ import test from "node:test";
 const puzzles = JSON.parse(
   await readFile(new URL("../app/data/puzzles.json", import.meta.url), "utf8"),
 );
+const launchExpansionSource = await readFile(
+  new URL("../app/data/launch-expansion.ts", import.meta.url),
+  "utf8",
+);
 
 const byId = new Map(puzzles.map((puzzle) => [puzzle.id, puzzle]));
 
@@ -32,6 +36,26 @@ test("every published puzzle passes the release schema", () => {
     assert.ok(puzzle.verification.method.length >= 12);
     assert.ok(Number.isInteger(puzzle.verification.version));
   }
+});
+
+test("launch expansion supplies ten original puzzles for each path", () => {
+  const records = [...launchExpansionSource.matchAll(/id: "([a-z0-9-]+)", title: "[^"]+", category: "([^"]+)", difficulty: ([1-5])/g)];
+  assert.equal(records.length, 60);
+  assert.equal(new Set(records.map((record) => record[1])).size, 60, "launch ids must be unique");
+
+  const counts = new Map();
+  for (const [, , category] of records) counts.set(category, (counts.get(category) ?? 0) + 1);
+  for (const category of [
+    "Logic & Knowledge",
+    "Mathematical Reasoning",
+    "Probability & Strategy",
+    "Algorithms & Optimization",
+    "Spatial Reasoning",
+    "Patterns & Numbers",
+  ]) assert.equal(counts.get(category), 10, `${category} needs ten additional puzzles`);
+
+  assert.ok(records.filter((record) => Number(record[3]) >= 4).length >= 5, "the expansion needs expert checkpoints");
+  assert.ok(!launchExpansionSource.includes("reference: \""), "expansion must not publish copied source references");
 });
 
 test("hat puzzle is forced by exhaustive knowledge-state filtering", () => {

@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import puzzlesData from "./data/puzzles.json";
+import { launchExpansion } from "./data/launch-expansion";
 import { supabase } from "./supabase";
 
-type Puzzle = (typeof puzzlesData)[number];
+const launchPuzzles = [...puzzlesData, ...launchExpansion];
+type Puzzle = (typeof launchPuzzles)[number];
 type View = "solve" | "paths" | "leaderboard" | "community" | "admin";
 type AccessPass = "monthly" | "annual";
 type AdminPuzzle = {
@@ -154,7 +156,7 @@ export default function WavefrontApp() {
     });
   }, []);
 
-  const livePuzzles = useMemo(() => puzzlesData.map((puzzle) => ({ ...puzzle, ...(contentOverrides[puzzle.id] ?? {}) })), [contentOverrides]);
+  const livePuzzles = useMemo(() => launchPuzzles.map((puzzle) => ({ ...puzzle, ...(contentOverrides[puzzle.id] ?? {}) })), [contentOverrides]);
 
   const isAdmin = authUser?.email?.toLowerCase() === "cbaforcat2017@gmail.com";
 
