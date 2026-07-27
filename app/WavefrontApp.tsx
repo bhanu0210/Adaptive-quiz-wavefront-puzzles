@@ -114,6 +114,9 @@ export default function WavefrontApp() {
   const [revealedHints, setRevealedHints] = useState(0);
   const [solvedIds, setSolvedIds] = useState<string[]>([]);
   const [solvePoints, setSolvePoints] = useState<Record<string, number>>({});
+  const [attemptedIds, setAttemptedIds] = useState<string[]>([]);
+  const [adaptiveCategory, setAdaptiveCategory] = useState<(typeof categories)[number]["name"]>("Logic & Knowledge");
+  const [adaptiveLevels, setAdaptiveLevels] = useState<Record<string, number>>(Object.fromEntries(categories.map((category) => [category.name, 3])));
   const [mastery, setMastery] = useState<Record<string, number>>(
     Object.fromEntries(categories.map((category) => [category.name, 0])),
   );
@@ -248,6 +251,14 @@ export default function WavefrontApp() {
     publication_status: "published", payload: puzzle, updated_at: "",
   });
 
+  useEffect(() => {
+    if (!supabase || !authUser) return;
+    void supabase.from("puzzle_adaptive_paths").select("category,current_difficulty").eq("user_id", authUser.id).then(({ data }) => {
+      if (!data?.length) return;
+      setAdaptiveLevels((current) => ({ ...current, ...Object.fromEntries(data.map((path) => [path.category, path.current_difficulty])) }));
+    });
+  }, [authUser?.id]);
+
   const loadAdminData = async () => {
     if (!supabase || !isAdmin) return;
     setAdminLoading(true);
@@ -351,8 +362,12 @@ export default function WavefrontApp() {
 
   const recommendedPuzzle = useMemo(() => {
     const unsolved = livePuzzles.filter((puzzle) => !solvedIds.includes(puzzle.id));
-    return unsolved.sort((a, b) => (mastery[a.category] ?? 50) - (mastery[b.category] ?? 50))[0] ?? livePuzzles[0];
-  }, [livePuzzles, mastery, solvedIds]);
+    const inCurrentPath = unsolved.filter((puzzle) => puzzle.category === adaptiveCategory);
+    const fresh = inCurrentPath.filter((puzzle) => !attemptedIds.includes(puzzle.id));
+    const choices = fresh.length ? fresh : (inCurrentPath.length ? inCurrentPath : unsolved);
+    const target = adaptiveLevels[adaptiveCategory] ?? 3;
+    return choices.sort((a, b) => Math.abs(a.difficulty - target) - Math.abs(b.difficulty - target))[0] ?? livePuzzles[0];
+  }, [livePuzzles, solvedIds, attemptedIds, adaptiveCategory, adaptiveLevels]);
 
   const playerScore = Object.values(solvePoints).reduce((total, points) => total + points, 0);
   const leaderboard = useMemo(() => {
@@ -374,17 +389,21 @@ export default function WavefrontApp() {
     if (selectedOption === null || !activePuzzle) return;
     setSubmitted(true);
     const correct = selectedOption === activePuzzle.correctOption;
+    const category = activePuzzle.category as (typeof categories)[number]["name"];
+    const nextDifficulty = correct && revealedHints === 0 ? Math.min(5, activePuzzle.difficulty + 1) : Math.max(1, activePuzzle.difficulty - 1);
+    setAdaptiveCategory(category);
+    setAdaptiveLevels((current) => ({ ...current, [category]: nextDifficulty }));
+    setAttemptedIds((current) => current.includes(activePuzzle.id) ? current : [...current, activePuzzle.id]);
+    if (supabase && authUser) {
+      void supabase.from("puzzle_adaptive_paths").upsert({ user_id: authUser.id, category, current_difficulty: nextDifficulty }, { onConflict: "user_id,category" });
+    }
     if (!correct || solvedIds.includes(activePuzzle.id)) return;
     const points = Math.max(40, 100 - revealedHints * 15);
     setSolvedIds((current) => [...current, activePuzzle.id]);
     setSolvePoints((current) => ({ ...current, [activePuzzle.id]: points }));
-    setMastery((current) => ({
-      ...current,
-      [activePuzzle.category]: Math.min(100, (current[activePuzzle.category] ?? 0) + points),
-    }));
+    setMastery((current) => ({ ...current, [activePuzzle.category]: Math.min(100, (current[activePuzzle.category] ?? 0) + points) }));
     if (supabase && authUser) {
-      void supabase.from("puzzle_progress").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, attempts: 1, hints_used: revealedHints, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" })
-        .then(() => setStreakVersion((version) => version + 1));
+      void supabase.from("puzzle_progress").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, attempts: 1, hints_used: revealedHints, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" }).then(() => setStreakVersion((version) => version + 1));
     }
   };
 
@@ -711,7 +730,7 @@ export default function WavefrontApp() {
                 <button onClick={() => startPuzzle(recommendedPuzzle)}>Start solving <span aria-hidden="true">→</span></button>
               </div>
               <SignalField />
-              <div className="feature-score"><span>Path fit</span><strong>94</strong></div>
+              <div className="feature-score"><span>Next level</span><strong>{adaptiveLevels[recommendedPuzzle.category] ?? 3}/5</strong></div>
             </div>
             <div className="section-heading">
               <div><span className="eyebrow">Adaptive paths</span><h2>Choose a thinking mode</h2></div>
