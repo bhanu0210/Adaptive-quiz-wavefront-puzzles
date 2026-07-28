@@ -33,6 +33,7 @@ type AdminTip = LearningTip & { publication_status: "draft" | "published" | "arc
 type AdminPuzzleForm = { title: string; category: string; difficulty: number; time: number; question: string; options: string[]; correctOption: number; hints: string[]; explanation: string; takeaway: string; publication_status: "draft" | "published" };
 type AdminTipForm = { category: string; title: string; body: string; sort_order: number; publication_status: "draft" | "published" | "archived" };
 type FeedbackKind = "general" | "unclear" | "incorrect" | "difficulty" | "suggestion";
+type CommunityPost = { id: string; user_id: string; author_name: string; title: string; category: string; replies: number; rating: number | null; status: "pending_review" | "published" | "rejected"; created_at: string };
 type RealLeader = { user_id: string; display_name: string; score: number; solved_count: number };
 type AdminFeedback = { id: string; user_id: string; puzzle_id: string; issue_type: string; rating: number | null; note: string; created_at: string };
 
@@ -86,12 +87,6 @@ const samplePlayers = [
   ["Kabir J.", 1010, 74], ["Tara H.", 830, 77], ["Nikhil W.", 650, 72], ["Diya E.", 420, 75], ["Om P.", 240, 70],
 ].map(([name, score]) => ({ name: name as string, score: score as number, solved: Math.max(1, Math.round((score as number) / 75)), streak: 0 }));
 
-const seedPosts = [
-  { id: 1, initials: "AK", author: "Aarav K.", title: "Can the bridge puzzle be solved in 16 minutes?", category: "Algorithms & Optimization", replies: 18, rating: 4.7, time: "2h" },
-  { id: 2, initials: "MS", author: "Meera S.", title: "A clean way to spot invariants in board puzzles", category: "Spatial Reasoning", replies: 31, rating: 4.9, time: "5h" },
-  { id: 3, initials: "RV", author: "Rohan V.", title: "My original three-switch logic challenge", category: "Logic & Knowledge", replies: 12, rating: 4.4, time: "1d" },
-];
-
 function difficultyLabel(level: number) {
   if (level <= 2) return "Accessible";
   if (level === 3) return "Stretch";
@@ -111,6 +106,23 @@ function calculateStreak(solvedAt: string[]) {
     cursor.setDate(cursor.getDate() - 1);
   }
   return streak;
+}
+
+function relativeTime(isoString: string) {
+  const minutes = Math.max(1, Math.round((Date.now() - new Date(isoString).getTime()) / 60000));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
+}
+
+function buildEmptyWeek(): { label: string; count: number }[] {
+  return Array.from({ length: 7 }, (_, index) => ({
+    label: new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", weekday: "narrow" }).format(
+      new Date(Date.now() - (6 - index) * 24 * 60 * 60 * 1000),
+    ),
+    count: 0,
+  }));
 }
 
 function AppMark() {
@@ -149,9 +161,12 @@ export default function WavefrontApp() {
   const [feedbackType, setFeedbackType] = useState<FeedbackKind>("general");
   const [feedbackNote, setFeedbackNote] = useState("");
   const [feedbackNotice, setFeedbackNotice] = useState("");
-  const [posts, setPosts] = useState(seedPosts);
+  const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
   const [showPostForm, setShowPostForm] = useState(false);
   const [postTitle, setPostTitle] = useState("");
+  const [postCategory, setPostCategory] = useState<(typeof categories)[number]["name"]>(categories[0].name);
+  const [postNotice, setPostNotice] = useState("");
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
@@ -185,6 +200,8 @@ export default function WavefrontApp() {
   const [tipsError, setTipsError] = useState("");
   const [streakDays, setStreakDays] = useState(0);
   const [streakVersion, setStreakVersion] = useState(0);
+  const [weeklyActivity, setWeeklyActivity] = useState(buildEmptyWeek);
+  const [weeklyChangePct, setWeeklyChangePct] = useState<number | null>(null);
   const [realLeaders, setRealLeaders] = useState<RealLeader[]>([]);
   const [leaderboardVersion, setLeaderboardVersion] = useState(0);
 
@@ -228,6 +245,25 @@ export default function WavefrontApp() {
       if (!data) return;
       setContentOverrides(Object.fromEntries(data.map((record) => [record.id, completePuzzlePayload(record.id, (record.payload ?? {}) as Partial<Puzzle>)])));
     });
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    setPostsLoading(true);
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from("puzzle_community_posts")
+          .select("id,user_id,author_name,title,category,replies,rating,status,created_at")
+          .order("created_at", { ascending: false })
+          .limit(50);
+        setPosts((data ?? []) as CommunityPost[]);
+      } catch {
+        setPosts([]);
+      } finally {
+        setPostsLoading(false);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -276,6 +312,31 @@ export default function WavefrontApp() {
     }
     void supabase.from("puzzle_progress").select("solved_at").eq("user_id", authUser.id).not("solved_at", "is", null)
       .then(({ data }) => setStreakDays(calculateStreak((data ?? []).flatMap((row) => row.solved_at ? [row.solved_at] : []))));
+  }, [authUser?.id, streakVersion]);
+
+  useEffect(() => {
+    if (!supabase || !authUser) {
+      setWeeklyActivity(buildEmptyWeek());
+      setWeeklyChangePct(null);
+      return;
+    }
+    void supabase.from("puzzle_progress").select("solved_at").eq("user_id", authUser.id).not("solved_at", "is", null)
+      .then(({ data }) => {
+        const solvedKeys = (data ?? []).flatMap((row) => (row.solved_at ? [indiaDateKey(row.solved_at)] : []));
+        const dayAt = (daysAgo: number) => new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
+        const dayKey = (daysAgo: number) => indiaDateKey(dayAt(daysAgo));
+        const dayLabel = (daysAgo: number) => new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", weekday: "narrow" }).format(dayAt(daysAgo));
+        const thisWeek = Array.from({ length: 7 }, (_, index) => {
+          const daysAgo = 6 - index;
+          const key = dayKey(daysAgo);
+          return { label: dayLabel(daysAgo), count: solvedKeys.filter((solved) => solved === key).length };
+        });
+        setWeeklyActivity(thisWeek);
+        const priorWeekTotal = Array.from({ length: 7 }, (_, index) => dayKey(13 - index))
+          .reduce((total, key) => total + solvedKeys.filter((solved) => solved === key).length, 0);
+        const thisWeekTotal = thisWeek.reduce((total, day) => total + day.count, 0);
+        setWeeklyChangePct(priorWeekTotal > 0 ? Math.round(((thisWeekTotal - priorWeekTotal) / priorWeekTotal) * 100) : null);
+      });
   }, [authUser?.id, streakVersion]);
 
   useEffect(() => {
@@ -496,20 +557,33 @@ export default function WavefrontApp() {
     setView(next);
   };
 
-  const addPost = () => {
+  const addPost = async () => {
     const cleanTitle = postTitle.trim();
     if (!cleanTitle) return;
-    setPosts((current) => [{
-      id: Date.now(),
-      initials: "YO",
-      author: "You",
-      title: cleanTitle,
-      category: "Community Challenge",
-      replies: 0,
-      rating: 0,
-      time: "now",
-    }, ...current]);
+    if (!authUser || !supabase) {
+      setShowPostForm(false);
+      setAuthMessage("Sign in to submit a puzzle to the community.");
+      setShowAuth(true);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("puzzle_community_posts")
+      .insert({
+        user_id: authUser.id,
+        author_name: authUser.email?.split("@")[0] ?? "Solver",
+        title: cleanTitle,
+        category: postCategory,
+        status: "pending_review",
+      })
+      .select("id,user_id,author_name,title,category,replies,rating,status,created_at")
+      .single();
+    if (error || !data) {
+      setPostNotice("Your puzzle could not be submitted. Please try again.");
+      return;
+    }
+    setPosts((current) => [data as CommunityPost, ...current]);
     setPostTitle("");
+    setPostNotice("");
     setShowPostForm(false);
   };
 
@@ -865,7 +939,7 @@ export default function WavefrontApp() {
             <div className="welcome-row">
               <div><span className="eyebrow">A fresh, verified roster every two weeks</span><h1>Keep your mind in motion.</h1><p>Choose one challenge at a time in Solve. Your score grows only from correct solves.</p></div>
               <div className="stat-strip" aria-label="Your performance">
-                <div><strong>{solvedIds.length ? "100%" : "-"}</strong><span>Accuracy</span></div>
+                <div title="Correct solves divided by attempts, this session"><strong>{attemptedIds.length ? `${Math.round((solvedIds.length / attemptedIds.length) * 100)}%` : "-"}</strong><span>Accuracy</span></div>
                 <div><strong>{solvedIds.length}</strong><span>Solved</span></div>
                 <div><strong>{authUser ? `#${leaderboard.find((player) => "isCurrent" in player)?.rank ?? "-"}` : "-"}</strong><span>Rank</span></div>
               </div>
@@ -882,19 +956,24 @@ export default function WavefrontApp() {
             </div>
             <div className="lower-grid">
               <section className="activity-panel">
-                <div className="section-heading compact"><div><span className="eyebrow">This week</span><h2>Reasoning rhythm</h2></div><strong>+12%</strong></div>
-                <div className="rhythm-chart" aria-label="Seven-day puzzle activity">
-                  {[42, 68, 36, 78, 54, 91, 64].map((height, index) => (
-                    <div key={index}><span style={{ height: `${height}%` }} /><small>{["M", "T", "W", "T", "F", "S", "S"][index]}</small></div>
-                  ))}
-                </div>
+                <div className="section-heading compact"><div><span className="eyebrow">This week</span><h2>Reasoning rhythm</h2></div>{weeklyChangePct !== null && <strong>{weeklyChangePct >= 0 ? "+" : ""}{weeklyChangePct}%</strong>}</div>
+                {authUser ? (
+                  <div className="rhythm-chart" aria-label="Seven-day puzzle activity">
+                    {weeklyActivity.map((day, index) => {
+                      const maxCount = Math.max(1, ...weeklyActivity.map((entry) => entry.count));
+                      return <div key={index}><span style={{ height: `${Math.round((day.count / maxCount) * 100)}%` }} /><small title={`${day.count} solved`}>{day.label}</small></div>;
+                    })}
+                  </div>
+                ) : (
+                  <p className="tips-error">Sign in to see your own solving rhythm.</p>
+                )}
               </section>
               <section className="community-preview">
-                <div className="section-heading compact"><div><span className="eyebrow">Community signal</span><h2>Most discussed</h2></div><button className="text-action" onClick={() => setView("community")}>Open forum →</button></div>
+                <div className="section-heading compact"><div><span className="eyebrow">Community signal</span><h2>Latest from the community</h2></div><button className="text-action" onClick={() => setView("community")}>Open forum →</button></div>
                 {posts.slice(0, 2).map((post) => (
                   <button className="discussion-row" key={post.id} onClick={() => setView("community")}>
-                    <span className="discussion-avatar">{post.initials}</span>
-                    <span className="discussion-copy"><strong>{post.title}</strong><small>{post.replies} replies · {post.rating || "New"} rating</small></span>
+                    <span className="discussion-avatar">{post.author_name.slice(0, 2).toUpperCase()}</span>
+                    <span className="discussion-copy"><strong>{post.title}</strong><small>{post.replies} replies · {post.rating ?? "New"} rating</small></span>
                     <span aria-hidden="true">→</span>
                   </button>
                 ))}
@@ -952,7 +1031,7 @@ export default function WavefrontApp() {
         ) : view === "leaderboard" ? (
           <section className="standard-view">
             <div className="page-heading split">
-              <div><span className="eyebrow">Season 08 · Week 2</span><h1>Leaderboard</h1><p>Verified solves, accuracy, and hint efficiency.</p></div>
+              <div><span className="eyebrow">Cycle {currentCycle.cycleNumber}</span><h1>Leaderboard</h1><p>Verified solves, accuracy, and hint efficiency.</p></div>
               <div className="rank-callout"><span>{authUser ? "Your position in this board" : "Current board"}</span><strong>{authUser ? `#${leaderboard.find((player) => "isCurrent" in player)?.rank ?? "-"}` : samplePlayers.length}</strong><small>{authUser ? `among ${leaderboard.length} listed solvers` : "20 seeded solvers"}</small></div>
             </div>
             <div className="podium">
@@ -1079,12 +1158,17 @@ export default function WavefrontApp() {
             </div>
             <div className="forum-layout">
               <div className="forum-feed">
-                <div className="forum-tabs"><button className="active">Trending</button><button>Newest</button><button>Unsolved</button></div>
-                {posts.map((post) => (
+                <div className="forum-tabs"><button className="active">Newest</button></div>
+                {postsLoading ? <p>Loading community posts...</p> : posts.length === 0 ? (
+                  <p className="admin-empty">No community puzzles yet. Be the first to submit one.</p>
+                ) : posts.map((post) => (
                   <article className="forum-post" key={post.id}>
-                    <div className="forum-avatar">{post.initials}</div>
-                    <div className="forum-copy"><span>{post.author} · {post.time}</span><h2>{post.title}</h2><small>{post.category}</small></div>
-                    <div className="forum-metrics"><strong>{post.rating || "—"}</strong><span>rating</span><strong>{post.replies}</strong><span>replies</span></div>
+                    <div className="forum-avatar">{post.author_name.slice(0, 2).toUpperCase()}</div>
+                    <div className="forum-copy">
+                      <span>{post.author_name} · {relativeTime(post.created_at)}{post.status !== "published" && " · Awaiting review"}</span>
+                      <h2>{post.title}</h2><small>{post.category}</small>
+                    </div>
+                    <div className="forum-metrics"><strong>{post.rating ?? "—"}</strong><span>rating</span><strong>{post.replies}</strong><span>replies</span></div>
                   </article>
                 ))}
               </div>
@@ -1093,7 +1177,7 @@ export default function WavefrontApp() {
                 <div className="review-step"><strong>01</strong><span>Answer and full reasoning required</span></div>
                 <div className="review-step"><strong>02</strong><span>Independent solver agreement</span></div>
                 <div className="review-step"><strong>03</strong><span>Editor verification before ranking</span></div>
-                <div className="review-count"><strong>28</strong><span>awaiting review</span></div>
+                <div className="review-count"><strong>{posts.filter((post) => post.status === "pending_review").length}</strong><span>awaiting review</span></div>
               </aside>
             </div>
           </section>
@@ -1124,8 +1208,9 @@ export default function WavefrontApp() {
             <button className="modal-close" aria-label="Close" onClick={() => setShowPostForm(false)}>×</button>
             <span className="eyebrow">Community submission</span><h2 id="post-title">Start with a clear challenge.</h2>
             <label>Puzzle title<input value={postTitle} onChange={(event) => setPostTitle(event.target.value)} placeholder="Give your puzzle a memorable name" /></label>
-            <label>Section<select defaultValue="Logic & Knowledge">{categories.map((category) => <option key={category.name}>{category.name}</option>)}</select></label>
-            <button className="checkout-button" onClick={addPost} disabled={!postTitle.trim()}>Send for review <span aria-hidden="true">→</span></button>
+            <label>Section<select value={postCategory} onChange={(event) => setPostCategory(event.target.value as (typeof categories)[number]["name"])}>{categories.map((category) => <option key={category.name}>{category.name}</option>)}</select></label>
+            <button className="checkout-button" onClick={() => void addPost()} disabled={!postTitle.trim()}>Send for review <span aria-hidden="true">→</span></button>
+            {postNotice && <small className="feedback-notice">{postNotice}</small>}
           </section>
         </div>
       )}
