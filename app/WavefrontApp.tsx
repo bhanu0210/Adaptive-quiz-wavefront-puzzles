@@ -5,10 +5,12 @@ import type { User } from "@supabase/supabase-js";
 import puzzlesData from "./data/puzzles.json";
 import { launchExpansion } from "./data/launch-expansion";
 import { supabase } from "./supabase";
+import { currentCycle, daysUntilNextRotation, rotationProgress } from "./data/cycle-meta";
+import { archivedCycles } from "./data/archive";
 
 const launchPuzzles = [...puzzlesData, ...launchExpansion];
 type Puzzle = (typeof launchPuzzles)[number];
-type View = "solve" | "daily" | "paths" | "tips" | "leaderboard" | "community" | "feedback" | "admin";
+type View = "solve" | "daily" | "paths" | "tips" | "leaderboard" | "community" | "archive" | "feedback" | "admin";
 type AccessPass = "monthly" | "annual";
 type DailyBrief = {
   date: string | null;
@@ -126,6 +128,7 @@ function SignalField() {
 export default function WavefrontApp() {
   const [view, setView] = useState<View>("solve");
   const [activePuzzle, setActivePuzzle] = useState<Puzzle | null>(null);
+  const [activePuzzleLabel, setActivePuzzleLabel] = useState("");
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [revealedHints, setRevealedHints] = useState(0);
@@ -438,8 +441,9 @@ export default function WavefrontApp() {
   }, [authUser?.id, realLeaders]);
   const leaders = leaderboard;
 
-  const startPuzzle = (puzzle: Puzzle) => {
+  const startPuzzle = (puzzle: Puzzle, label?: string) => {
     setActivePuzzle(puzzle);
+    setActivePuzzleLabel(label ?? `Verified challenge ${String(livePuzzles.indexOf(puzzle) + 1).padStart(2, "0")}`);
     setSelectedOption(null);
     setSubmitted(false);
     setRevealedHints(0);
@@ -483,7 +487,8 @@ export default function WavefrontApp() {
     { id: "tips", label: "Tips", glyph: "05" },
     { id: "leaderboard", label: "Leaderboard", glyph: "06" },
     { id: "community", label: "Community", glyph: "07" },
-    ...(isAdmin ? [{ id: "admin" as View, label: "Admin", glyph: "08" }] : []),
+    { id: "archive", label: "Archive", glyph: "08" },
+    ...(isAdmin ? [{ id: "admin" as View, label: "Admin", glyph: "09" }] : []),
   ];
 
   const changeView = (next: View) => {
@@ -757,10 +762,10 @@ export default function WavefrontApp() {
           ))}
         </nav>
         <div className="sidebar-release">
-          <span className="release-kicker">Drop 08</span>
+          <span className="release-kicker">Cycle {currentCycle.cycleNumber}</span>
           <strong>Fresh puzzles</strong>
-          <span>Next wave in 9 days</span>
-          <div className="mini-progress"><span style={{ width: "58%" }} /></div>
+          <span>{daysUntilNextRotation() <= 0 ? "New roster due now" : `Next wave in ${daysUntilNextRotation()} day${daysUntilNextRotation() === 1 ? "" : "s"}`}</span>
+          <div className="mini-progress"><span style={{ width: `${rotationProgress()}%` }} /></div>
         </div>
       </aside>
 
@@ -773,7 +778,7 @@ export default function WavefrontApp() {
                 <div className="puzzle-meta">
                   <span>{activePuzzle.category}</span><i /><span>{difficultyLabel(activePuzzle.difficulty)}</span><i /><span>{activePuzzle.time} min</span>
                 </div>
-                <div className="puzzle-number">Verified challenge {String(livePuzzles.indexOf(activePuzzle) + 1).padStart(2, "0")}</div>
+                <div className="puzzle-number">{activePuzzleLabel}</div>
                 <h1>{activePuzzle.title}</h1>
                 <p className="question-copy">{activePuzzle.question}</p>
                 <div className="answer-list">
@@ -858,7 +863,7 @@ export default function WavefrontApp() {
         ) : view === "solve" ? (
           <section className="dashboard-view">
             <div className="welcome-row">
-              <div><span className="eyebrow">New verified puzzles every week</span><h1>Keep your mind in motion.</h1><p>Choose one challenge at a time in Solve. Your score grows only from correct solves.</p></div>
+              <div><span className="eyebrow">A fresh, verified roster every two weeks</span><h1>Keep your mind in motion.</h1><p>Choose one challenge at a time in Solve. Your score grows only from correct solves.</p></div>
               <div className="stat-strip" aria-label="Your performance">
                 <div><strong>{solvedIds.length ? "100%" : "-"}</strong><span>Accuracy</span></div>
                 <div><strong>{solvedIds.length}</strong><span>Solved</span></div>
@@ -942,7 +947,7 @@ export default function WavefrontApp() {
           <section className="standard-view tips-view">
             <div className="page-heading split"><div><span className="eyebrow">Members learning library</span><h1>Methods that travel</h1><p>Short, reusable techniques drawn from the puzzle paths. Updated as new releases arrive.</p></div>{!hasActivePass && <button className="subscribe-button" onClick={() => setShowSubscribe(true)}>Unlock learning library</button>}</div>
             {hasActivePass ? <div className="tips-library">{tipsLoading ? <p>Loading your learning library...</p> : tipsError ? <p className="tips-error">{tipsError}</p> : categories.map((category) => { const pathTips = learningTips.filter((tip) => tip.category === category.name); return <section className="tips-chapter" key={category.name}><div><span className={`path-code ${category.color}`}>{category.code}</span><h2>{category.name}</h2><p>{pathTips.length} reusable methods</p></div><div className="tips-grid">{pathTips.map((tip) => <article className="tip-card" key={tip.id}><h3>{tip.title}</h3><p>{tip.body}</p></article>)}</div></section>; })}</div> : <section className="tips-locked"><span className="eyebrow">Subscriber access</span><h2>Build a toolkit, not just a score.</h2><p>Members can use the complete, growing tips library across logic, maths, strategy, algorithms, spatial reasoning, and patterns.</p><button className="checkout-button" onClick={() => setShowSubscribe(true)}>Get full access <span aria-hidden="true">→</span></button></section>}
-            {hasActivePass && <section className="tips-workshop"><div className="page-heading"><span className="eyebrow">Worked examples</span><h2>See each method used once.</h2><p>Use these tiny examples as a warm-up, then carry the same move into the full puzzles.</p></div><div className="tips-workshop-grid"><article><span>Logic</span><h3>Use the reverse check</h3><p><b>If A then B.</b> If B is false, A cannot be true. This is the fastest way to remove an impossible option.</p><code>A → B · not B → not A</code></article><article><span>Logic</span><h3>Fill forced slots first</h3><p>If A cannot be seat 1 and B must be seat 1, A must take one of the remaining seats. Write forced facts before guessing.</p><code>B = 1 · A ≠ 1</code></article><article><span>Logic</span><h3>Split into every case</h3><p>If a source might answer truthfully, falsely, or randomly, check what your conclusion means in each of those cases, not just the likely one.</p><code>case 1 · case 2 → same answer</code></article><article><span>Maths</span><h3>Make percentages small</h3><p>Thirty percent of 80 is three groups of eight. Turn a percentage into a friendlier multiplication.</p><code>30% of 80 = 3 × 8 = 24</code></article><article><span>Maths</span><h3>Undo the change</h3><p>After a 20% discount, 80 is only 80% of the original price. Divide by 0.8 to travel backwards.</p><code>80 ÷ 0.8 = 100</code></article><article><span>Maths</span><h3>Turn work into a rate</h3><p>A pipe that fills a tank in 6 hours does 1/6 of the tank every hour. Add hourly rates together, then invert the total to find combined time.</p><code>1/6 + 1/3 = 1/2 → 2 h</code></article><article><span>Strategy</span><h3>Count equal cases</h3><p>With three equally likely doors, one hides the prize and two do not. Count the outcomes before trusting intuition.</p><code>1 win / 3 cases</code></article><article><span>Strategy</span><h3>Use new information</h3><p>When one losing door opens, do not forget the host gave information. Recalculate instead of treating the choice as fresh.</p><code>switch = 2 winning cases</code></article><article><span>Strategy</span><h3>Weight the branches</h3><p>When an outcome depends on how likely each scenario really is, multiply every payoff by its own probability before comparing totals.</p><code>0.99 × big ≫ 0.01 × small</code></article><article><span>Algorithms</span><h3>Look at the gaps</h3><p>The sequence 1, 3, 6, 10 has gaps of 2, 3, and 4. The next gap is 5, so the next term is 15.</p><code>+2 · +3 · +4 · +5</code></article><article><span>Algorithms</span><h3>Keep the invariant</h3><p>On a chequerboard, every domino covers one light and one dark square. If unequal colours remain, tiling is impossible.</p><code>light = dark is required</code></article><article><span>Algorithms</span><h3>Split into three, not two</h3><p>A balance scale gives three answers: left, right, or even. Split candidates into three even groups so every answer removes useful ground.</p><code>3 groups → 2 weighings find 1 of 8</code></article><article><span>Spatial</span><h3>Anchor one corner</h3><p>Before rotating a shape, mark its top-left corner in your mind. Track that anchor rather than trying to rotate everything at once.</p><code>anchor → rotate → compare</code></article><article><span>Spatial</span><h3>Count by position</h3><p>For a painted cube, corner cubes, edge cubes, and face cubes have different numbers of painted sides. Count each group separately.</p><code>corners · edges · faces</code></article><article><span>Spatial</span><h3>Unroll the curve</h3><p>A shortest path across a curved surface, like a cylinder, becomes an ordinary straight line once you unroll that surface flat.</p><code>unroll → straight line → Pythagoras</code></article><article><span>Patterns</span><h3>Make a difference table</h3><p>For 2, 6, 12, 20, the gaps are 4, 6, 8. The next gap is 10, so the next number is 30.</p><code>2 → 6 → 12 → 20 → 30</code></article><article><span>Patterns</span><h3>Test tiny inputs</h3><p>When a rule uses n, try n = 1, 2, and 3. Small examples reveal whether the rule really holds.</p><code>test → compare → generalise</code></article><article><span>Patterns</span><h3>Check the step sizes</h3><p>If a sequence isn't a simple sum or product, list what is added at each step. Those step sizes can form their own easy pattern.</p><code>+2 +3 +4 +5 +6 → next +7</code></article></div></section>}
+            {hasActivePass && <section className="tips-workshop"><div className="page-heading"><span className="eyebrow">Worked examples</span><h2>See each method used once.</h2><p>Use these tiny examples as a warm-up, then carry the same move into the full puzzles.</p></div><div className="tips-workshop-grid"><article><span>Logic</span><h3>Use the reverse check</h3><p><b>If A then B.</b> If B is false, A cannot be true. This is the fastest way to remove an impossible option.</p><code>A → B · not B → not A</code></article><article><span>Logic</span><h3>Fill forced slots first</h3><p>If A cannot be seat 1 and B must be seat 1, A must take one of the remaining seats. Write forced facts before guessing.</p><code>B = 1 · A ≠ 1</code></article><article><span>Logic</span><h3>Split into every case</h3><p>If a source might answer truthfully, falsely, or randomly, check what your conclusion means in each of those cases, not just the likely one.</p><code>case 1 · case 2 → same answer</code></article><article><span>Maths</span><h3>Make percentages small</h3><p>Thirty percent of 80 is three groups of eight. Turn a percentage into a friendlier multiplication.</p><code>30% of 80 = 3 × 8 = 24</code></article><article><span>Maths</span><h3>Undo the change</h3><p>After a 20% discount, 80 is only 80% of the original price. Divide by 0.8 to travel backwards.</p><code>80 ÷ 0.8 = 100</code></article><article><span>Maths</span><h3>Turn work into a rate</h3><p>A pipe that fills a tank in 6 hours does 1/6 of the tank every hour. Add hourly rates together, then invert the total to find combined time.</p><code>1/6 + 1/3 = 1/2 → 2 h</code></article><article><span>Strategy</span><h3>Count equal cases</h3><p>With three equally likely doors, one hides the prize and two do not. Count the outcomes before trusting intuition.</p><code>1 win / 3 cases</code></article><article><span>Strategy</span><h3>Use new information</h3><p>When one losing door opens, do not forget the host gave information. Recalculate instead of treating the choice as fresh.</p><code>switch = 2 winning cases</code></article><article><span>Strategy</span><h3>Weight the branches</h3><p>When an outcome depends on how likely each scenario really is, multiply every payoff by its own probability before comparing totals.</p><code>0.99 × big ≫ 0.01 × small</code></article><article><span>Algorithms</span><h3>Look at the gaps</h3><p>The sequence 1, 3, 6, 10 has gaps of 2, 3, and 4. The next gap is 5, so the next term is 15.</p><code>+2 · +3 · +4 · +5</code></article><article><span>Algorithms</span><h3>Keep the invariant</h3><p>On a chequerboard, every domino covers one light and one dark square. If unequal colours remain, tiling is impossible.</p><code>light = dark is required</code></article><article><span>Algorithms</span><h3>Split into three, not two</h3><p>A balance scale gives three answers: left, right, or even. Split candidates into three even groups so every answer removes useful ground.</p><code>3 groups → 2 weighings find 1 of 8</code></article><article><span>Spatial</span><h3>Anchor one corner</h3><p>Before rotating a shape, mark its top-left corner in your mind. Track that anchor rather than trying to rotate everything at once.</p><code>anchor → rotate → compare</code></article><article><span>Spatial</span><h3>Count by position</h3><p>For a painted cube, corner cubes, edge cubes, and face cubes have different numbers of painted sides. Count each group separately.</p><code>corners · edges · faces</code></article><article><span>Spatial</span><h3>Unroll the curve</h3><p>A shortest path across a curved surface, like a cylinder, becomes an ordinary straight line once you unroll that surface flat.</p><code>unroll → straight line → Pythagoras</code></article><article><span>Patterns</span><h3>Make a difference table</h3><p>For 2, 6, 12, 20, the gaps are 4, 6, 8. The next gap is 10, so the next number is 30.</p><code>2 → 6 → 12 → 20 → 30</code></article><article><span>Patterns</span><h3>Test tiny inputs</h3><p>When a rule uses n, try n = 1, 2, and 3. Small examples reveal whether the rule really holds.</p><code>test → compare → generalise</code></article><article><span>Patterns</span><h3>Check the step sizes</h3><p>If a sequence is not a simple sum or product, list what is added at each step. Those step sizes can form their own easy pattern.</p><code>+2 +3 +4 +5 +6 → next +7</code></article></div></section>}
           </section>
         ) : view === "leaderboard" ? (
           <section className="standard-view">
@@ -1034,6 +1039,37 @@ export default function WavefrontApp() {
               <div className="admin-panel-heading"><div><span className="eyebrow">Feedback inbox</span><h2>What solvers are telling you</h2></div><span>{adminFeedback.length} recent messages</span></div>
               <div className="admin-list">{adminFeedback.length ? adminFeedback.map((item) => <article className="admin-feedback" key={item.id}><strong>{item.issue_type} {item.rating ? `· ${item.rating}/5` : ""}</strong><p>{item.note}</p><small>{item.puzzle_id === "site-feedback" ? "Site feedback" : item.puzzle_id} · {new Date(item.created_at).toLocaleDateString("en-IN")}</small></article>) : <p className="admin-empty">No feedback has arrived yet.</p>}</div>
             </section>
+          </section>
+        ) : view === "archive" ? (
+          <section className="standard-view">
+            <div className="page-heading"><span className="eyebrow">Past rosters</span><h1>Archive</h1><p>Every retired puzzle roster stays here, fully solvable, once a fresh set of 90 takes its place every two weeks.</p></div>
+            {archivedCycles.length === 0 ? (
+              <div className="daily-empty">
+                <strong>No past cycles yet.</strong>
+                <p>The current roster is Cycle {currentCycle.cycleNumber}. Retired rosters will appear here automatically the next time a fresh set of puzzles is published.</p>
+              </div>
+            ) : (
+              <div className="path-list">
+                {archivedCycles.map((cycle) => (
+                  <section className="path-row" key={cycle.cycleNumber}>
+                    <div className="path-code large">{String(cycle.cycleNumber).padStart(2, "0")}</div>
+                    <div className="path-row-title">
+                      <span>Cycle {String(cycle.cycleNumber).padStart(2, "0")}</span>
+                      <h2>{new Date(cycle.startedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} – {new Date(cycle.endedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</h2>
+                      <small>{cycle.puzzles.length} puzzles</small>
+                    </div>
+                    <div className="path-puzzles">
+                      {cycle.puzzles.map((puzzle, index) => (
+                        <button type="button" key={puzzle.id} onClick={() => startPuzzle(puzzle as unknown as Puzzle, `Archived · Cycle ${cycle.cycleNumber} · Challenge ${String(index + 1).padStart(2, "0")}`)}>
+                          <span className="puzzle-dot">{index + 1}</span>
+                          <span><strong>{puzzle.title}</strong><small>{puzzle.category} · {difficultyLabel(puzzle.difficulty)} · {puzzle.time} min</small></span><span aria-hidden="true">→</span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
           </section>
         ) : (
           <section className="standard-view">
