@@ -40,4 +40,20 @@ npm run dev
 npm test
 ```
 
-The production target uses Vinext and Cloudflare-compatible output.
+## Vercel Deployment
+
+The site is a native Next.js application for Vercel. The homepage is statically
+generated and `app/api/daily-brief/route.ts` provides the cached daily-puzzle
+endpoint.
+
+In Vercel, import the GitHub repository and set these Production and Preview
+environment variables:
+
+```text
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+```
+
+Supabase Edge Functions continue to handle secure Razorpay operations, so no
+Razorpay secret belongs in Vercel. Add `puzzles.wavefrontdaily.in` only after
+the Vercel preview passes login, daily puzzle, and payment checks.

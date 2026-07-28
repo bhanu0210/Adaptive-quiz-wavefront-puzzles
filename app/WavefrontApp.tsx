@@ -53,6 +53,7 @@ type LearningTip = { id: string; category: string; title: string; body: string; 
 function completePuzzlePayload(id: string, stored: Partial<Puzzle>) {
   const source = launchPuzzles.find((puzzle) => puzzle.id === id);
   if (!source) return stored;
+  const storedCorrectOption = stored.correctOption;
   const usableOptions = Array.isArray(stored.options) && stored.options.length === 4 && stored.options.every((option) => typeof option === "string" && option.trim());
   const usableHints = Array.isArray(stored.hints) && stored.hints.length === 3 && stored.hints.every((hint) => typeof hint === "string" && hint.trim());
   return {
@@ -62,7 +63,7 @@ function completePuzzlePayload(id: string, stored: Partial<Puzzle>) {
     category: stored.category?.trim() ? stored.category : source.category,
     question: stored.question?.trim() ? stored.question : source.question,
     options: usableOptions ? stored.options : source.options,
-    correctOption: Number.isInteger(stored.correctOption) && stored.correctOption >= 0 && stored.correctOption < 4 ? stored.correctOption : source.correctOption,
+    correctOption: typeof storedCorrectOption === "number" && Number.isInteger(storedCorrectOption) && storedCorrectOption >= 0 && storedCorrectOption < 4 ? storedCorrectOption : source.correctOption,
     hints: usableHints ? stored.hints : source.hints,
     explanation: stored.explanation?.trim() ? stored.explanation : source.explanation,
     takeaway: stored.takeaway?.trim() ? stored.takeaway : source.takeaway,
@@ -254,15 +255,15 @@ export default function WavefrontApp() {
       return;
     }
     setTipsLoading(true);
-    void supabase.from("puzzle_learning_tips").select("id,category,title,body,sort_order").eq("publication_status", "published").order("category").order("sort_order")
-      .then(({ data, error }) => {
-        if (error) {
-          setTipsError("The learning library could not be loaded. Please refresh once.");
-          return;
-        }
+    void (async () => {
+      const { data, error } = await supabase.from("puzzle_learning_tips").select("id,category,title,body,sort_order").eq("publication_status", "published").order("category").order("sort_order");
+      if (error) {
+        setTipsError("The learning library could not be loaded. Please refresh once.");
+      } else {
         setLearningTips((data ?? []) as LearningTip[]);
-      })
-      .finally(() => setTipsLoading(false));
+      }
+      setTipsLoading(false);
+    })();
   }, [authUser?.id, hasActivePass]);
 
   useEffect(() => {
@@ -582,10 +583,11 @@ export default function WavefrontApp() {
       setCheckoutNotice("Payments are being activated. Please try again shortly.");
       return;
     }
+    const client = supabase;
 
     setCheckoutLoading(true);
     setCheckoutNotice("");
-    const { data, error } = await supabase.functions.invoke("create-puzzle-order", { body: { pass: selectedPass } });
+    const { data, error } = await client.functions.invoke("create-puzzle-order", { body: { pass: selectedPass } });
     if (error || !data) {
       setCheckoutLoading(false);
       setCheckoutNotice(error?.message ?? "We could not start checkout. Please try again.");
@@ -600,7 +602,7 @@ export default function WavefrontApp() {
     }
 
     type RazorpayCheckout = new (options: Record<string, unknown>) => { open: () => void };
-    const Razorpay = (window as Window & { Razorpay: RazorpayCheckout }).Razorpay;
+    const Razorpay = (window as unknown as Window & { Razorpay: RazorpayCheckout }).Razorpay;
     const checkout = new Razorpay({
       key: data.keyId,
       amount: data.amount,
@@ -610,7 +612,7 @@ export default function WavefrontApp() {
       order_id: data.orderId,
       theme: { color: "#165dff" },
       handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
-        const { data: verificationData, error: verificationError } = await supabase.functions.invoke("verify-puzzle-payment", {
+        const { data: verificationData, error: verificationError } = await client.functions.invoke("verify-puzzle-payment", {
           body: { ...response, pass: selectedPass },
         });
         setCheckoutLoading(false);
