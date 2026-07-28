@@ -5,10 +5,12 @@ import type { User } from "@supabase/supabase-js";
 import puzzlesData from "./data/puzzles.json";
 import { launchExpansion } from "./data/launch-expansion";
 import { supabase } from "./supabase";
+import { currentCycle, daysUntilNextRotation, rotationProgress } from "./data/cycle-meta";
+import { archivedCycles } from "./data/archive";
 
 const launchPuzzles = [...puzzlesData, ...launchExpansion];
 type Puzzle = (typeof launchPuzzles)[number];
-type View = "solve" | "daily" | "paths" | "tips" | "leaderboard" | "community" | "feedback" | "admin";
+type View = "solve" | "daily" | "paths" | "tips" | "leaderboard" | "community" | "archive" | "feedback" | "admin";
 type AccessPass = "monthly" | "annual";
 type DailyBrief = {
   date: string | null;
@@ -31,6 +33,7 @@ type AdminTip = LearningTip & { publication_status: "draft" | "published" | "arc
 type AdminPuzzleForm = { title: string; category: string; difficulty: number; time: number; question: string; options: string[]; correctOption: number; hints: string[]; explanation: string; takeaway: string; publication_status: "draft" | "published" };
 type AdminTipForm = { category: string; title: string; body: string; sort_order: number; publication_status: "draft" | "published" | "archived" };
 type FeedbackKind = "general" | "unclear" | "incorrect" | "difficulty" | "suggestion";
+type CommunityPost = { id: string; user_id: string; author_name: string; title: string; category: string; replies: number; rating: number | null; status: "pending_review" | "published" | "rejected"; created_at: string };
 type RealLeader = { user_id: string; display_name: string; score: number; solved_count: number };
 type AdminFeedback = { id: string; user_id: string; puzzle_id: string; issue_type: string; rating: number | null; note: string; created_at: string };
 
@@ -84,12 +87,6 @@ const samplePlayers = [
   ["Kabir J.", 1010, 74], ["Tara H.", 830, 77], ["Nikhil W.", 650, 72], ["Diya E.", 420, 75], ["Om P.", 240, 70],
 ].map(([name, score]) => ({ name: name as string, score: score as number, solved: Math.max(1, Math.round((score as number) / 75)), streak: 0 }));
 
-const seedPosts = [
-  { id: 1, initials: "AK", author: "Aarav K.", title: "Can the bridge puzzle be solved in 16 minutes?", category: "Algorithms & Optimization", replies: 18, rating: 4.7, time: "2h" },
-  { id: 2, initials: "MS", author: "Meera S.", title: "A clean way to spot invariants in board puzzles", category: "Spatial Reasoning", replies: 31, rating: 4.9, time: "5h" },
-  { id: 3, initials: "RV", author: "Rohan V.", title: "My original three-switch logic challenge", category: "Logic & Knowledge", replies: 12, rating: 4.4, time: "1d" },
-];
-
 function difficultyLabel(level: number) {
   if (level <= 2) return "Accessible";
   if (level === 3) return "Stretch";
@@ -111,6 +108,23 @@ function calculateStreak(solvedAt: string[]) {
   return streak;
 }
 
+function relativeTime(isoString: string) {
+  const minutes = Math.max(1, Math.round((Date.now() - new Date(isoString).getTime()) / 60000));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
+}
+
+function buildEmptyWeek(): { label: string; count: number }[] {
+  return Array.from({ length: 7 }, (_, index) => ({
+    label: new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", weekday: "narrow" }).format(
+      new Date(Date.now() - (6 - index) * 24 * 60 * 60 * 1000),
+    ),
+    count: 0,
+  }));
+}
+
 function AppMark() {
   return (
     <div className="brand-mark" aria-hidden="true">
@@ -126,6 +140,7 @@ function SignalField() {
 export default function WavefrontApp() {
   const [view, setView] = useState<View>("solve");
   const [activePuzzle, setActivePuzzle] = useState<Puzzle | null>(null);
+  const [activePuzzleLabel, setActivePuzzleLabel] = useState("");
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [revealedHints, setRevealedHints] = useState(0);
@@ -146,9 +161,12 @@ export default function WavefrontApp() {
   const [feedbackType, setFeedbackType] = useState<FeedbackKind>("general");
   const [feedbackNote, setFeedbackNote] = useState("");
   const [feedbackNotice, setFeedbackNotice] = useState("");
-  const [posts, setPosts] = useState(seedPosts);
+  const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
   const [showPostForm, setShowPostForm] = useState(false);
   const [postTitle, setPostTitle] = useState("");
+  const [postCategory, setPostCategory] = useState<(typeof categories)[number]["name"]>(categories[0].name);
+  const [postNotice, setPostNotice] = useState("");
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
@@ -182,6 +200,8 @@ export default function WavefrontApp() {
   const [tipsError, setTipsError] = useState("");
   const [streakDays, setStreakDays] = useState(0);
   const [streakVersion, setStreakVersion] = useState(0);
+  const [weeklyActivity, setWeeklyActivity] = useState(buildEmptyWeek);
+  const [weeklyChangePct, setWeeklyChangePct] = useState<number | null>(null);
   const [realLeaders, setRealLeaders] = useState<RealLeader[]>([]);
   const [leaderboardVersion, setLeaderboardVersion] = useState(0);
 
@@ -225,6 +245,25 @@ export default function WavefrontApp() {
       if (!data) return;
       setContentOverrides(Object.fromEntries(data.map((record) => [record.id, completePuzzlePayload(record.id, (record.payload ?? {}) as Partial<Puzzle>)])));
     });
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    setPostsLoading(true);
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from("puzzle_community_posts")
+          .select("id,user_id,author_name,title,category,replies,rating,status,created_at")
+          .order("created_at", { ascending: false })
+          .limit(50);
+        setPosts((data ?? []) as CommunityPost[]);
+      } catch {
+        setPosts([]);
+      } finally {
+        setPostsLoading(false);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -273,6 +312,31 @@ export default function WavefrontApp() {
     }
     void supabase.from("puzzle_progress").select("solved_at").eq("user_id", authUser.id).not("solved_at", "is", null)
       .then(({ data }) => setStreakDays(calculateStreak((data ?? []).flatMap((row) => row.solved_at ? [row.solved_at] : []))));
+  }, [authUser?.id, streakVersion]);
+
+  useEffect(() => {
+    if (!supabase || !authUser) {
+      setWeeklyActivity(buildEmptyWeek());
+      setWeeklyChangePct(null);
+      return;
+    }
+    void supabase.from("puzzle_progress").select("solved_at").eq("user_id", authUser.id).not("solved_at", "is", null)
+      .then(({ data }) => {
+        const solvedKeys = (data ?? []).flatMap((row) => (row.solved_at ? [indiaDateKey(row.solved_at)] : []));
+        const dayAt = (daysAgo: number) => new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
+        const dayKey = (daysAgo: number) => indiaDateKey(dayAt(daysAgo));
+        const dayLabel = (daysAgo: number) => new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", weekday: "narrow" }).format(dayAt(daysAgo));
+        const thisWeek = Array.from({ length: 7 }, (_, index) => {
+          const daysAgo = 6 - index;
+          const key = dayKey(daysAgo);
+          return { label: dayLabel(daysAgo), count: solvedKeys.filter((solved) => solved === key).length };
+        });
+        setWeeklyActivity(thisWeek);
+        const priorWeekTotal = Array.from({ length: 7 }, (_, index) => dayKey(13 - index))
+          .reduce((total, key) => total + solvedKeys.filter((solved) => solved === key).length, 0);
+        const thisWeekTotal = thisWeek.reduce((total, day) => total + day.count, 0);
+        setWeeklyChangePct(priorWeekTotal > 0 ? Math.round(((thisWeekTotal - priorWeekTotal) / priorWeekTotal) * 100) : null);
+      });
   }, [authUser?.id, streakVersion]);
 
   useEffect(() => {
@@ -438,8 +502,9 @@ export default function WavefrontApp() {
   }, [authUser?.id, realLeaders]);
   const leaders = leaderboard;
 
-  const startPuzzle = (puzzle: Puzzle) => {
+  const startPuzzle = (puzzle: Puzzle, label?: string) => {
     setActivePuzzle(puzzle);
+    setActivePuzzleLabel(label ?? `Verified challenge ${String(livePuzzles.indexOf(puzzle) + 1).padStart(2, "0")}`);
     setSelectedOption(null);
     setSubmitted(false);
     setRevealedHints(0);
@@ -483,7 +548,8 @@ export default function WavefrontApp() {
     { id: "tips", label: "Tips", glyph: "05" },
     { id: "leaderboard", label: "Leaderboard", glyph: "06" },
     { id: "community", label: "Community", glyph: "07" },
-    ...(isAdmin ? [{ id: "admin" as View, label: "Admin", glyph: "08" }] : []),
+    { id: "archive", label: "Archive", glyph: "08" },
+    ...(isAdmin ? [{ id: "admin" as View, label: "Admin", glyph: "09" }] : []),
   ];
 
   const changeView = (next: View) => {
@@ -491,20 +557,33 @@ export default function WavefrontApp() {
     setView(next);
   };
 
-  const addPost = () => {
+  const addPost = async () => {
     const cleanTitle = postTitle.trim();
     if (!cleanTitle) return;
-    setPosts((current) => [{
-      id: Date.now(),
-      initials: "YO",
-      author: "You",
-      title: cleanTitle,
-      category: "Community Challenge",
-      replies: 0,
-      rating: 0,
-      time: "now",
-    }, ...current]);
+    if (!authUser || !supabase) {
+      setShowPostForm(false);
+      setAuthMessage("Sign in to submit a puzzle to the community.");
+      setShowAuth(true);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("puzzle_community_posts")
+      .insert({
+        user_id: authUser.id,
+        author_name: authUser.email?.split("@")[0] ?? "Solver",
+        title: cleanTitle,
+        category: postCategory,
+        status: "pending_review",
+      })
+      .select("id,user_id,author_name,title,category,replies,rating,status,created_at")
+      .single();
+    if (error || !data) {
+      setPostNotice("Your puzzle could not be submitted. Please try again.");
+      return;
+    }
+    setPosts((current) => [data as CommunityPost, ...current]);
     setPostTitle("");
+    setPostNotice("");
     setShowPostForm(false);
   };
 
@@ -757,10 +836,10 @@ export default function WavefrontApp() {
           ))}
         </nav>
         <div className="sidebar-release">
-          <span className="release-kicker">Drop 08</span>
+          <span className="release-kicker">Cycle {currentCycle.cycleNumber}</span>
           <strong>Fresh puzzles</strong>
-          <span>Next wave in 9 days</span>
-          <div className="mini-progress"><span style={{ width: "58%" }} /></div>
+          <span>{daysUntilNextRotation() <= 0 ? "New roster due now" : `Next wave in ${daysUntilNextRotation()} day${daysUntilNextRotation() === 1 ? "" : "s"}`}</span>
+          <div className="mini-progress"><span style={{ width: `${rotationProgress()}%` }} /></div>
         </div>
       </aside>
 
@@ -773,7 +852,7 @@ export default function WavefrontApp() {
                 <div className="puzzle-meta">
                   <span>{activePuzzle.category}</span><i /><span>{difficultyLabel(activePuzzle.difficulty)}</span><i /><span>{activePuzzle.time} min</span>
                 </div>
-                <div className="puzzle-number">Verified challenge {String(livePuzzles.indexOf(activePuzzle) + 1).padStart(2, "0")}</div>
+                <div className="puzzle-number">{activePuzzleLabel}</div>
                 <h1>{activePuzzle.title}</h1>
                 <p className="question-copy">{activePuzzle.question}</p>
                 <div className="answer-list">
@@ -858,9 +937,9 @@ export default function WavefrontApp() {
         ) : view === "solve" ? (
           <section className="dashboard-view">
             <div className="welcome-row">
-              <div><span className="eyebrow">New verified puzzles every week</span><h1>Keep your mind in motion.</h1><p>Choose one challenge at a time in Solve. Your score grows only from correct solves.</p></div>
+              <div><span className="eyebrow">A fresh, verified roster every two weeks</span><h1>Keep your mind in motion.</h1><p>Choose one challenge at a time in Solve. Your score grows only from correct solves.</p></div>
               <div className="stat-strip" aria-label="Your performance">
-                <div><strong>{solvedIds.length ? "100%" : "-"}</strong><span>Accuracy</span></div>
+                <div title="Correct solves divided by attempts, this session"><strong>{attemptedIds.length ? `${Math.round((solvedIds.length / attemptedIds.length) * 100)}%` : "-"}</strong><span>Accuracy</span></div>
                 <div><strong>{solvedIds.length}</strong><span>Solved</span></div>
                 <div><strong>{authUser ? `#${leaderboard.find((player) => "isCurrent" in player)?.rank ?? "-"}` : "-"}</strong><span>Rank</span></div>
               </div>
@@ -877,19 +956,24 @@ export default function WavefrontApp() {
             </div>
             <div className="lower-grid">
               <section className="activity-panel">
-                <div className="section-heading compact"><div><span className="eyebrow">This week</span><h2>Reasoning rhythm</h2></div><strong>+12%</strong></div>
-                <div className="rhythm-chart" aria-label="Seven-day puzzle activity">
-                  {[42, 68, 36, 78, 54, 91, 64].map((height, index) => (
-                    <div key={index}><span style={{ height: `${height}%` }} /><small>{["M", "T", "W", "T", "F", "S", "S"][index]}</small></div>
-                  ))}
-                </div>
+                <div className="section-heading compact"><div><span className="eyebrow">This week</span><h2>Reasoning rhythm</h2></div>{weeklyChangePct !== null && <strong>{weeklyChangePct >= 0 ? "+" : ""}{weeklyChangePct}%</strong>}</div>
+                {authUser ? (
+                  <div className="rhythm-chart" aria-label="Seven-day puzzle activity">
+                    {weeklyActivity.map((day, index) => {
+                      const maxCount = Math.max(1, ...weeklyActivity.map((entry) => entry.count));
+                      return <div key={index}><span style={{ height: `${Math.round((day.count / maxCount) * 100)}%` }} /><small title={`${day.count} solved`}>{day.label}</small></div>;
+                    })}
+                  </div>
+                ) : (
+                  <p className="tips-error">Sign in to see your own solving rhythm.</p>
+                )}
               </section>
               <section className="community-preview">
-                <div className="section-heading compact"><div><span className="eyebrow">Community signal</span><h2>Most discussed</h2></div><button className="text-action" onClick={() => setView("community")}>Open forum →</button></div>
+                <div className="section-heading compact"><div><span className="eyebrow">Community signal</span><h2>Latest from the community</h2></div><button className="text-action" onClick={() => setView("community")}>Open forum →</button></div>
                 {posts.slice(0, 2).map((post) => (
                   <button className="discussion-row" key={post.id} onClick={() => setView("community")}>
-                    <span className="discussion-avatar">{post.initials}</span>
-                    <span className="discussion-copy"><strong>{post.title}</strong><small>{post.replies} replies · {post.rating || "New"} rating</small></span>
+                    <span className="discussion-avatar">{post.author_name.slice(0, 2).toUpperCase()}</span>
+                    <span className="discussion-copy"><strong>{post.title}</strong><small>{post.replies} replies · {post.rating ?? "New"} rating</small></span>
                     <span aria-hidden="true">→</span>
                   </button>
                 ))}
@@ -942,12 +1026,12 @@ export default function WavefrontApp() {
           <section className="standard-view tips-view">
             <div className="page-heading split"><div><span className="eyebrow">Members learning library</span><h1>Methods that travel</h1><p>Short, reusable techniques drawn from the puzzle paths. Updated as new releases arrive.</p></div>{!hasActivePass && <button className="subscribe-button" onClick={() => setShowSubscribe(true)}>Unlock learning library</button>}</div>
             {hasActivePass ? <div className="tips-library">{tipsLoading ? <p>Loading your learning library...</p> : tipsError ? <p className="tips-error">{tipsError}</p> : categories.map((category) => { const pathTips = learningTips.filter((tip) => tip.category === category.name); return <section className="tips-chapter" key={category.name}><div><span className={`path-code ${category.color}`}>{category.code}</span><h2>{category.name}</h2><p>{pathTips.length} reusable methods</p></div><div className="tips-grid">{pathTips.map((tip) => <article className="tip-card" key={tip.id}><h3>{tip.title}</h3><p>{tip.body}</p></article>)}</div></section>; })}</div> : <section className="tips-locked"><span className="eyebrow">Subscriber access</span><h2>Build a toolkit, not just a score.</h2><p>Members can use the complete, growing tips library across logic, maths, strategy, algorithms, spatial reasoning, and patterns.</p><button className="checkout-button" onClick={() => setShowSubscribe(true)}>Get full access <span aria-hidden="true">→</span></button></section>}
-            {hasActivePass && <section className="tips-workshop"><div className="page-heading"><span className="eyebrow">Worked examples</span><h2>See each method used once.</h2><p>Use these tiny examples as a warm-up, then carry the same move into the full puzzles.</p></div><div className="tips-workshop-grid"><article><span>Logic</span><h3>Use the reverse check</h3><p><b>If A then B.</b> If B is false, A cannot be true. This is the fastest way to remove an impossible option.</p><code>A → B · not B → not A</code></article><article><span>Logic</span><h3>Fill forced slots first</h3><p>If A cannot be seat 1 and B must be seat 1, A must take one of the remaining seats. Write forced facts before guessing.</p><code>B = 1 · A ≠ 1</code></article><article><span>Logic</span><h3>Split into every case</h3><p>If a source might answer truthfully, falsely, or randomly, check what your conclusion means in each of those cases, not just the likely one.</p><code>case 1 · case 2 → same answer</code></article><article><span>Maths</span><h3>Make percentages small</h3><p>Thirty percent of 80 is three groups of eight. Turn a percentage into a friendlier multiplication.</p><code>30% of 80 = 3 × 8 = 24</code></article><article><span>Maths</span><h3>Undo the change</h3><p>After a 20% discount, 80 is only 80% of the original price. Divide by 0.8 to travel backwards.</p><code>80 ÷ 0.8 = 100</code></article><article><span>Maths</span><h3>Turn work into a rate</h3><p>A pipe that fills a tank in 6 hours does 1/6 of the tank every hour. Add hourly rates together, then invert the total to find combined time.</p><code>1/6 + 1/3 = 1/2 → 2 h</code></article><article><span>Strategy</span><h3>Count equal cases</h3><p>With three equally likely doors, one hides the prize and two do not. Count the outcomes before trusting intuition.</p><code>1 win / 3 cases</code></article><article><span>Strategy</span><h3>Use new information</h3><p>When one losing door opens, do not forget the host gave information. Recalculate instead of treating the choice as fresh.</p><code>switch = 2 winning cases</code></article><article><span>Strategy</span><h3>Weight the branches</h3><p>When an outcome depends on how likely each scenario really is, multiply every payoff by its own probability before comparing totals.</p><code>0.99 × big ≫ 0.01 × small</code></article><article><span>Algorithms</span><h3>Look at the gaps</h3><p>The sequence 1, 3, 6, 10 has gaps of 2, 3, and 4. The next gap is 5, so the next term is 15.</p><code>+2 · +3 · +4 · +5</code></article><article><span>Algorithms</span><h3>Keep the invariant</h3><p>On a chequerboard, every domino covers one light and one dark square. If unequal colours remain, tiling is impossible.</p><code>light = dark is required</code></article><article><span>Algorithms</span><h3>Split into three, not two</h3><p>A balance scale gives three answers: left, right, or even. Split candidates into three even groups so every answer removes useful ground.</p><code>3 groups → 2 weighings find 1 of 8</code></article><article><span>Spatial</span><h3>Anchor one corner</h3><p>Before rotating a shape, mark its top-left corner in your mind. Track that anchor rather than trying to rotate everything at once.</p><code>anchor → rotate → compare</code></article><article><span>Spatial</span><h3>Count by position</h3><p>For a painted cube, corner cubes, edge cubes, and face cubes have different numbers of painted sides. Count each group separately.</p><code>corners · edges · faces</code></article><article><span>Spatial</span><h3>Unroll the curve</h3><p>A shortest path across a curved surface, like a cylinder, becomes an ordinary straight line once you unroll that surface flat.</p><code>unroll → straight line → Pythagoras</code></article><article><span>Patterns</span><h3>Make a difference table</h3><p>For 2, 6, 12, 20, the gaps are 4, 6, 8. The next gap is 10, so the next number is 30.</p><code>2 → 6 → 12 → 20 → 30</code></article><article><span>Patterns</span><h3>Test tiny inputs</h3><p>When a rule uses n, try n = 1, 2, and 3. Small examples reveal whether the rule really holds.</p><code>test → compare → generalise</code></article><article><span>Patterns</span><h3>Check the step sizes</h3><p>If a sequence isn't a simple sum or product, list what is added at each step. Those step sizes can form their own easy pattern.</p><code>+2 +3 +4 +5 +6 → next +7</code></article></div></section>}
+            {hasActivePass && <section className="tips-workshop"><div className="page-heading"><span className="eyebrow">Worked examples</span><h2>See each method used once.</h2><p>Use these tiny examples as a warm-up, then carry the same move into the full puzzles.</p></div><div className="tips-workshop-grid"><article><span>Logic</span><h3>Use the reverse check</h3><p><b>If A then B.</b> If B is false, A cannot be true. This is the fastest way to remove an impossible option.</p><code>A → B · not B → not A</code></article><article><span>Logic</span><h3>Fill forced slots first</h3><p>If A cannot be seat 1 and B must be seat 1, A must take one of the remaining seats. Write forced facts before guessing.</p><code>B = 1 · A ≠ 1</code></article><article><span>Logic</span><h3>Split into every case</h3><p>If a source might answer truthfully, falsely, or randomly, check what your conclusion means in each of those cases, not just the likely one.</p><code>case 1 · case 2 → same answer</code></article><article><span>Maths</span><h3>Make percentages small</h3><p>Thirty percent of 80 is three groups of eight. Turn a percentage into a friendlier multiplication.</p><code>30% of 80 = 3 × 8 = 24</code></article><article><span>Maths</span><h3>Undo the change</h3><p>After a 20% discount, 80 is only 80% of the original price. Divide by 0.8 to travel backwards.</p><code>80 ÷ 0.8 = 100</code></article><article><span>Maths</span><h3>Turn work into a rate</h3><p>A pipe that fills a tank in 6 hours does 1/6 of the tank every hour. Add hourly rates together, then invert the total to find combined time.</p><code>1/6 + 1/3 = 1/2 → 2 h</code></article><article><span>Strategy</span><h3>Count equal cases</h3><p>With three equally likely doors, one hides the prize and two do not. Count the outcomes before trusting intuition.</p><code>1 win / 3 cases</code></article><article><span>Strategy</span><h3>Use new information</h3><p>When one losing door opens, do not forget the host gave information. Recalculate instead of treating the choice as fresh.</p><code>switch = 2 winning cases</code></article><article><span>Strategy</span><h3>Weight the branches</h3><p>When an outcome depends on how likely each scenario really is, multiply every payoff by its own probability before comparing totals.</p><code>0.99 × big ≫ 0.01 × small</code></article><article><span>Algorithms</span><h3>Look at the gaps</h3><p>The sequence 1, 3, 6, 10 has gaps of 2, 3, and 4. The next gap is 5, so the next term is 15.</p><code>+2 · +3 · +4 · +5</code></article><article><span>Algorithms</span><h3>Keep the invariant</h3><p>On a chequerboard, every domino covers one light and one dark square. If unequal colours remain, tiling is impossible.</p><code>light = dark is required</code></article><article><span>Algorithms</span><h3>Split into three, not two</h3><p>A balance scale gives three answers: left, right, or even. Split candidates into three even groups so every answer removes useful ground.</p><code>3 groups → 2 weighings find 1 of 8</code></article><article><span>Spatial</span><h3>Anchor one corner</h3><p>Before rotating a shape, mark its top-left corner in your mind. Track that anchor rather than trying to rotate everything at once.</p><code>anchor → rotate → compare</code></article><article><span>Spatial</span><h3>Count by position</h3><p>For a painted cube, corner cubes, edge cubes, and face cubes have different numbers of painted sides. Count each group separately.</p><code>corners · edges · faces</code></article><article><span>Spatial</span><h3>Unroll the curve</h3><p>A shortest path across a curved surface, like a cylinder, becomes an ordinary straight line once you unroll that surface flat.</p><code>unroll → straight line → Pythagoras</code></article><article><span>Patterns</span><h3>Make a difference table</h3><p>For 2, 6, 12, 20, the gaps are 4, 6, 8. The next gap is 10, so the next number is 30.</p><code>2 → 6 → 12 → 20 → 30</code></article><article><span>Patterns</span><h3>Test tiny inputs</h3><p>When a rule uses n, try n = 1, 2, and 3. Small examples reveal whether the rule really holds.</p><code>test → compare → generalise</code></article><article><span>Patterns</span><h3>Check the step sizes</h3><p>If a sequence is not a simple sum or product, list what is added at each step. Those step sizes can form their own easy pattern.</p><code>+2 +3 +4 +5 +6 → next +7</code></article></div></section>}
           </section>
         ) : view === "leaderboard" ? (
           <section className="standard-view">
             <div className="page-heading split">
-              <div><span className="eyebrow">Season 08 · Week 2</span><h1>Leaderboard</h1><p>Verified solves, accuracy, and hint efficiency.</p></div>
+              <div><span className="eyebrow">Cycle {currentCycle.cycleNumber}</span><h1>Leaderboard</h1><p>Verified solves, accuracy, and hint efficiency.</p></div>
               <div className="rank-callout"><span>{authUser ? "Your position in this board" : "Current board"}</span><strong>{authUser ? `#${leaderboard.find((player) => "isCurrent" in player)?.rank ?? "-"}` : samplePlayers.length}</strong><small>{authUser ? `among ${leaderboard.length} listed solvers` : "20 seeded solvers"}</small></div>
             </div>
             <div className="podium">
@@ -1035,6 +1119,37 @@ export default function WavefrontApp() {
               <div className="admin-list">{adminFeedback.length ? adminFeedback.map((item) => <article className="admin-feedback" key={item.id}><strong>{item.issue_type} {item.rating ? `· ${item.rating}/5` : ""}</strong><p>{item.note}</p><small>{item.puzzle_id === "site-feedback" ? "Site feedback" : item.puzzle_id} · {new Date(item.created_at).toLocaleDateString("en-IN")}</small></article>) : <p className="admin-empty">No feedback has arrived yet.</p>}</div>
             </section>
           </section>
+        ) : view === "archive" ? (
+          <section className="standard-view">
+            <div className="page-heading"><span className="eyebrow">Past rosters</span><h1>Archive</h1><p>Every retired puzzle roster stays here, fully solvable, once a fresh set of 90 takes its place every two weeks.</p></div>
+            {archivedCycles.length === 0 ? (
+              <div className="daily-empty">
+                <strong>No past cycles yet.</strong>
+                <p>The current roster is Cycle {currentCycle.cycleNumber}. Retired rosters will appear here automatically the next time a fresh set of puzzles is published.</p>
+              </div>
+            ) : (
+              <div className="path-list">
+                {archivedCycles.map((cycle) => (
+                  <section className="path-row" key={cycle.cycleNumber}>
+                    <div className="path-code large">{String(cycle.cycleNumber).padStart(2, "0")}</div>
+                    <div className="path-row-title">
+                      <span>Cycle {String(cycle.cycleNumber).padStart(2, "0")}</span>
+                      <h2>{new Date(cycle.startedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} – {new Date(cycle.endedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</h2>
+                      <small>{cycle.puzzles.length} puzzles</small>
+                    </div>
+                    <div className="path-puzzles">
+                      {cycle.puzzles.map((puzzle, index) => (
+                        <button type="button" key={puzzle.id} onClick={() => startPuzzle(puzzle as unknown as Puzzle, `Archived · Cycle ${cycle.cycleNumber} · Challenge ${String(index + 1).padStart(2, "0")}`)}>
+                          <span className="puzzle-dot">{index + 1}</span>
+                          <span><strong>{puzzle.title}</strong><small>{puzzle.category} · {difficultyLabel(puzzle.difficulty)} · {puzzle.time} min</small></span><span aria-hidden="true">→</span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
+          </section>
         ) : (
           <section className="standard-view">
             <div className="page-heading split">
@@ -1043,12 +1158,17 @@ export default function WavefrontApp() {
             </div>
             <div className="forum-layout">
               <div className="forum-feed">
-                <div className="forum-tabs"><button className="active">Trending</button><button>Newest</button><button>Unsolved</button></div>
-                {posts.map((post) => (
+                <div className="forum-tabs"><button className="active">Newest</button></div>
+                {postsLoading ? <p>Loading community posts...</p> : posts.length === 0 ? (
+                  <p className="admin-empty">No community puzzles yet. Be the first to submit one.</p>
+                ) : posts.map((post) => (
                   <article className="forum-post" key={post.id}>
-                    <div className="forum-avatar">{post.initials}</div>
-                    <div className="forum-copy"><span>{post.author} · {post.time}</span><h2>{post.title}</h2><small>{post.category}</small></div>
-                    <div className="forum-metrics"><strong>{post.rating || "—"}</strong><span>rating</span><strong>{post.replies}</strong><span>replies</span></div>
+                    <div className="forum-avatar">{post.author_name.slice(0, 2).toUpperCase()}</div>
+                    <div className="forum-copy">
+                      <span>{post.author_name} · {relativeTime(post.created_at)}{post.status !== "published" && " · Awaiting review"}</span>
+                      <h2>{post.title}</h2><small>{post.category}</small>
+                    </div>
+                    <div className="forum-metrics"><strong>{post.rating ?? "—"}</strong><span>rating</span><strong>{post.replies}</strong><span>replies</span></div>
                   </article>
                 ))}
               </div>
@@ -1057,7 +1177,7 @@ export default function WavefrontApp() {
                 <div className="review-step"><strong>01</strong><span>Answer and full reasoning required</span></div>
                 <div className="review-step"><strong>02</strong><span>Independent solver agreement</span></div>
                 <div className="review-step"><strong>03</strong><span>Editor verification before ranking</span></div>
-                <div className="review-count"><strong>28</strong><span>awaiting review</span></div>
+                <div className="review-count"><strong>{posts.filter((post) => post.status === "pending_review").length}</strong><span>awaiting review</span></div>
               </aside>
             </div>
           </section>
@@ -1088,8 +1208,9 @@ export default function WavefrontApp() {
             <button className="modal-close" aria-label="Close" onClick={() => setShowPostForm(false)}>×</button>
             <span className="eyebrow">Community submission</span><h2 id="post-title">Start with a clear challenge.</h2>
             <label>Puzzle title<input value={postTitle} onChange={(event) => setPostTitle(event.target.value)} placeholder="Give your puzzle a memorable name" /></label>
-            <label>Section<select defaultValue="Logic & Knowledge">{categories.map((category) => <option key={category.name}>{category.name}</option>)}</select></label>
-            <button className="checkout-button" onClick={addPost} disabled={!postTitle.trim()}>Send for review <span aria-hidden="true">→</span></button>
+            <label>Section<select value={postCategory} onChange={(event) => setPostCategory(event.target.value as (typeof categories)[number]["name"])}>{categories.map((category) => <option key={category.name}>{category.name}</option>)}</select></label>
+            <button className="checkout-button" onClick={() => void addPost()} disabled={!postTitle.trim()}>Send for review <span aria-hidden="true">→</span></button>
+            {postNotice && <small className="feedback-notice">{postNotice}</small>}
           </section>
         </div>
       )}
