@@ -38,10 +38,10 @@ test("every published puzzle passes the release schema", () => {
   }
 });
 
-test("launch expansion supplies ten original puzzles for each path", () => {
+test("launch expansion supplies thirteen original puzzles for each path", () => {
   const records = [...launchExpansionSource.matchAll(/id: "([a-z0-9-]+)", title: "[^"]+", category: "([^"]+)", difficulty: ([1-5])/g)];
-  assert.equal(records.length, 60);
-  assert.equal(new Set(records.map((record) => record[1])).size, 60, "launch ids must be unique");
+  assert.equal(records.length, 78);
+  assert.equal(new Set(records.map((record) => record[1])).size, 78, "launch ids must be unique");
 
   const counts = new Map();
   for (const [, , category] of records) counts.set(category, (counts.get(category) ?? 0) + 1);
@@ -52,7 +52,7 @@ test("launch expansion supplies ten original puzzles for each path", () => {
     "Algorithms & Optimization",
     "Spatial Reasoning",
     "Patterns & Numbers",
-  ]) assert.equal(counts.get(category), 10, `${category} needs ten additional puzzles`);
+  ]) assert.equal(counts.get(category), 13, `${category} needs thirteen additional puzzles`);
 
   assert.ok(records.filter((record) => Number(record[3]) >= 4).length >= 5, "the expansion needs expert checkpoints");
   assert.ok(!launchExpansionSource.includes("reference: \""), "expansion must not publish copied source references");
@@ -244,4 +244,135 @@ test("look-and-say transformation produces 312211", () => {
   }
   assert.equal(output, "312211");
   assert.equal(publishedAnswer("look-and-say"), "312211");
+});
+
+test("tuesday-boy inclusion-exclusion over 196 gender-day pairs gives 13/27", () => {
+  let event = 0;
+  let both = 0;
+  for (let g1 = 0; g1 < 2; g1 += 1) {
+    for (let d1 = 0; d1 < 7; d1 += 1) {
+      for (let g2 = 0; g2 < 2; g2 += 1) {
+        for (let d2 = 0; d2 < 7; d2 += 1) {
+          const child1IsTuesdayBoy = g1 === 0 && d1 === 0;
+          const child2IsTuesdayBoy = g2 === 0 && d2 === 0;
+          if (child1IsTuesdayBoy || child2IsTuesdayBoy) {
+            event += 1;
+            if (g1 === 0 && g2 === 0) both += 1;
+          }
+        }
+      }
+    }
+  }
+  assert.equal(event, 27);
+  assert.equal(both, 13);
+  assert.equal(both / event, 13 / 27);
+});
+
+test("144 product and 17 sum uniquely select twin ages 4, 4, and 9", () => {
+  const candidates = [];
+  for (let twin = 1; twin <= 12; twin += 1) {
+    if (144 % (twin * twin) !== 0) continue;
+    const mother = 144 / (twin * twin);
+    if (mother > twin) candidates.push([twin, twin, mother]);
+  }
+  const withSumSeventeen = candidates.filter(([twin, , mother]) => twin + twin + mother === 17);
+  assert.deepEqual(withSumSeventeen, [[4, 4, 9]]);
+});
+
+test("unfolding the cylinder gives a 10 cm shortest ant path", () => {
+  const circumference = 16;
+  const height = 6;
+  const halfway = circumference / 2;
+  const distance = Math.sqrt(halfway ** 2 + height ** 2);
+  assert.equal(distance, 10);
+});
+
+test("eight-coin ternary weighing strategy finds the fake in two weighings", () => {
+  const weigh = (groupA, groupB, fakeCoin) => {
+    if (groupA.includes(fakeCoin)) return "left-lighter";
+    if (groupB.includes(fakeCoin)) return "right-lighter";
+    return "balanced";
+  };
+
+  for (let fakeCoin = 0; fakeCoin < 8; fakeCoin += 1) {
+    const first = weigh([0, 1, 2], [3, 4, 5], fakeCoin);
+    const candidates = first === "left-lighter" ? [0, 1, 2] : first === "right-lighter" ? [3, 4, 5] : [6, 7];
+    const second = weigh([candidates[0]], [candidates[1] ?? candidates[0]], fakeCoin);
+    const found = second === "left-lighter" ? candidates[0] : second === "right-lighter" ? candidates[1] : candidates[2];
+    assert.equal(found, fakeCoin, `strategy must find fake coin ${fakeCoin}`);
+  }
+
+  let minimumWeighings = 0;
+  while (3 ** minimumWeighings < 8) minimumWeighings += 1;
+  assert.equal(minimumWeighings, 2);
+});
+
+test("shortest-job-first minimizes total completion time for 2, 3, and 5 minute tasks", () => {
+  const permute = (values) => {
+    if (values.length <= 1) return [values];
+    return values.flatMap((value, index) => {
+      const rest = [...values.slice(0, index), ...values.slice(index + 1)];
+      return permute(rest).map((tail) => [value, ...tail]);
+    });
+  };
+
+  const totals = permute([2, 3, 5]).map((order) => {
+    let elapsed = 0;
+    let total = 0;
+    for (const task of order) {
+      elapsed += task;
+      total += elapsed;
+    }
+    return { order, total };
+  });
+
+  const best = totals.reduce((min, entry) => (entry.total < min.total ? entry : min));
+  assert.equal(best.total, 17);
+  assert.deepEqual(best.order, [2, 3, 5]);
+});
+
+test("wolf, goat, and cabbage river crossing needs exactly seven trips", () => {
+  const start = { farmer: 0, wolf: 0, goat: 0, cabbage: 0 };
+  const goal = { farmer: 1, wolf: 1, goat: 1, cabbage: 1 };
+  const key = (state) => `${state.farmer}${state.wolf}${state.goat}${state.cabbage}`;
+  const isUnsafe = (state) =>
+    (state.wolf === state.goat && state.farmer !== state.wolf) ||
+    (state.goat === state.cabbage && state.farmer !== state.goat);
+
+  const visited = new Set([key(start)]);
+  let frontier = [start];
+  let steps = 0;
+
+  while (!frontier.some((state) => key(state) === key(goal))) {
+    const next = [];
+    for (const state of frontier) {
+      const movable = ["wolf", "goat", "cabbage"].filter((item) => state[item] === state.farmer);
+      for (const item of [null, ...movable]) {
+        const nextState = { ...state, farmer: 1 - state.farmer };
+        if (item) nextState[item] = 1 - nextState[item];
+        if (isUnsafe(nextState)) continue;
+        const nextKey = key(nextState);
+        if (!visited.has(nextKey)) {
+          visited.add(nextKey);
+          next.push(nextState);
+        }
+      }
+    }
+    frontier = next;
+    steps += 1;
+    assert.ok(steps <= 20, "search should not run away");
+  }
+
+  assert.equal(steps, 7);
+});
+
+test("plane x+y+z=3 slices a cube into a regular hexagon", () => {
+  const points = [
+    [2, 1, 0], [1, 2, 0], [0, 2, 1], [0, 1, 2], [1, 0, 2], [2, 0, 1],
+  ];
+  for (const point of points) assert.equal(point[0] + point[1] + point[2], 3);
+
+  const distance = (a, b) => Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2);
+  const sides = points.map((point, index) => distance(point, points[(index + 1) % points.length]));
+  for (const side of sides) assert.ok(Math.abs(side - Math.sqrt(2)) < 1e-9);
 });
