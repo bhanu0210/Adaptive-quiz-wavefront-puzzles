@@ -4,11 +4,15 @@ This is the operating manual for the recurring "new puzzle roster" cycle. It's w
 
 ## What this is
 
-Every 14 days, the entire "current" puzzle roster (90 puzzles, 15 per category across the 6 paths: Logic & Knowledge, Mathematical Reasoning, Probability & Strategy, Algorithms & Optimization, Spatial Reasoning, Patterns & Numbers) gets **replaced** with a fresh set of 90. The outgoing roster is **archived**, not deleted — it stays fully browsable and solvable under the Archive nav section, it just stops being the "current" spotlight set.
+Every 14 days, a fresh 90-puzzle roster (15 per category across the 6 paths: Logic & Knowledge, Mathematical Reasoning, Probability & Strategy, Algorithms & Optimization, Spatial Reasoning, Patterns & Numbers) gets **generated and opened as a pull request.** When the outgoing roster is eventually replaced, it moves to the Archive nav section — fully browsable and solvable, it just stops being the "current" spotlight set.
 
-## Step 0 — Check whether it's actually time
+**Generation and publishing are two separate, decoupled decisions:**
+- **Generation is automatic and clock-driven.** A new draft roster gets authored and opened as a PR every 14 days, no matter what happened to the previous draft.
+- **Publishing (merging the PR so it goes live) is an admin decision, not automatic.** The site owner reviews and merges whenever they're ready — that might be right away, or they might sit on a draft PR for longer than 14 days before merging it (or never merge a given draft at all, e.g. if two drafts pile up and they only want to publish one). **Never merge a rotation PR yourself.** Open it, describe it clearly, and stop.
 
-Read `app/data/cycle-meta.ts`. It has `startedAt` (ISO date the current cycle went live) and `rotationDays` (14). If fewer than `rotationDays` days have passed since `startedAt`, **stop here — do nothing, don't commit, don't open a PR.** This file's trigger fires weekly as a safety net, but a new roster should only ship every other firing.
+## Step 0 — Confirm you were actually triggered for a rotation
+
+If you're reading this because a scheduled trigger fired, that trigger's own schedule *is* the 14-day clock — you don't need to re-derive timing from `app/data/cycle-meta.ts`. Just proceed. (`cycle-meta.ts` describes the *currently live* roster — how long it's been live, for the sidebar countdown UI — not when the next draft should be generated; don't conflate the two.) After finishing this cycle's work (Steps 1–7), reschedule your own trigger for 14 days from now before ending your turn, so the cadence continues regardless of whether this draft gets merged.
 
 ## Step 1 — Gather source material
 
@@ -54,6 +58,15 @@ Alongside the new puzzles, add a handful of new worked-example tip cards (in the
 ## Step 7 — Ship it
 
 - Commit on a fresh branch (don't work directly on `main`).
-- Push and **open a pull request** — do not merge it yourself. The site owner reviews and merges manually, then triggers their own redeploy (there is no CI/auto-deploy in this repo as of Cycle 1; check whether that's changed before assuming otherwise).
-- In the PR description, call out: the new puzzle count/mix, which source families were used, which were archived, and a reminder that a manual redeploy is needed after merge for the live site to reflect it.
+- Push and **open a pull request** — do not merge it yourself, ever, regardless of how confident you are. The site owner reviews and merges manually, on their own timeline, and that merge is what makes it live.
+- As of the Vercel-migration merge (after Cycle 1), this repo has real CI: a Vercel preview-deployment check runs automatically on every PR. Check that it goes green before considering the PR ready; if it fails, investigate and fix (see the drive-to-green posture in your own standing instructions for PRs you opened) rather than leaving a red check for the owner to sort out.
+- In the PR description, call out: the new puzzle count/mix, which source families were used, which were archived, and — since merging is what publishes it — a note that merging this PR will both replace the live roster **and** reset the real-solver leaderboard for the new cycle (see the leaderboard note below).
 - If anything in this playbook seems out of date, or you hit a genuine judgment call (e.g. the source material has dried up for a category, or the difficulty balance doesn't work out cleanly), say so in the PR description rather than silently improvising — the owner reads these.
+
+## Step 8 — Reschedule yourself
+
+Before ending your turn, reschedule your own trigger for 14 days from now (regardless of whether this draft PR gets merged soon, later, or not at all) so the generation cadence continues on its own clock.
+
+## Leaderboard reset (tied to *publishing*, not generation)
+
+When a new roster actually goes live (i.e. an admin merges a rotation PR), the real-solver leaderboard is meant to reset to zero for the new cycle — **except** the ~20 seeded reference players (`samplePlayers` in `app/WavefrontApp.tsx`), which are intentional permanent reference points, not fake data to remove. This reset is not yet implemented — it requires a Supabase-side change (scoping `puzzle_solve_scores` / the `puzzle_leaderboard` RPC by cycle number) that no session has had credentials to make as of this writing. Check with the owner before assuming this has been built, and don't attempt to fake a reset by deleting data directly. There's also an open question about what should happen to whoever's in the top 10 at the moment of reset (a "Hall of Fame" record, a badge, just noted in the PR — unclear as of this writing) — ask rather than guess if this comes up before it's been resolved.
