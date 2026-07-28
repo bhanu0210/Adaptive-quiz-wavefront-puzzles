@@ -34,6 +34,7 @@ type AdminPuzzleForm = { title: string; category: string; difficulty: number; ti
 type AdminTipForm = { category: string; title: string; body: string; sort_order: number; publication_status: "draft" | "published" | "archived" };
 type FeedbackKind = "general" | "unclear" | "incorrect" | "difficulty" | "suggestion";
 type CommunityPost = { id: string; user_id: string; author_name: string; title: string; category: string; replies: number; rating: number | null; status: "pending_review" | "published" | "rejected"; created_at: string };
+type CycleRewardResult = { user_id: string; rank: number; score: number; was_subscribed: boolean; weekly_days_granted: number; streak_after: number; streak_milestone_days_granted: number };
 type RealLeader = { user_id: string; display_name: string; score: number; solved_count: number };
 type AdminFeedback = { id: string; user_id: string; puzzle_id: string; issue_type: string; rating: number | null; note: string; created_at: string };
 
@@ -182,6 +183,9 @@ export default function WavefrontApp() {
   const [adminSelectedId, setAdminSelectedId] = useState<string | null>(null);
   const [adminPuzzleForm, setAdminPuzzleForm] = useState<AdminPuzzleForm | null>(null);
   const [adminNotice, setAdminNotice] = useState("");
+  const [cycleRewardResults, setCycleRewardResults] = useState<CycleRewardResult[] | null>(null);
+  const [cycleRewardLoading, setCycleRewardLoading] = useState(false);
+  const [cycleRewardNotice, setCycleRewardNotice] = useState("");
   const [adminTips, setAdminTips] = useState<AdminTip[]>([]);
   const [adminSelectedTipId, setAdminSelectedTipId] = useState<string | null>(null);
   const [adminTipForm, setAdminTipForm] = useState<AdminTipForm | null>(null);
@@ -455,8 +459,44 @@ export default function WavefrontApp() {
       published_at: new Date().toISOString(),
     }));
     const { error } = await supabase.from("puzzle_catalog").upsert(rows, { onConflict: "id" });
-    setAdminNotice(error ? "The catalog sync could not be completed." : "All 72 launch puzzles are now stored in the editable catalog.");
+    setAdminNotice(error ? "The catalog sync could not be completed." : `All ${launchPuzzles.length} launch puzzles are now stored in the editable catalog.`);
     await loadAdminData();
+  };
+
+  const registerCurrentCycle = async () => {
+    if (!supabase) return;
+    setCycleRewardLoading(true);
+    setCycleRewardNotice("");
+    const { error } = await supabase.rpc("admin_register_cycle", {
+      p_cycle_number: currentCycle.cycleNumber,
+      p_started_at: currentCycle.startedAt,
+      p_puzzle_ids: launchPuzzles.map((puzzle) => puzzle.id),
+    });
+    setCycleRewardLoading(false);
+    setCycleRewardNotice(error ? `Could not register the cycle: ${error.message}` : `Cycle ${currentCycle.cycleNumber} registered with ${launchPuzzles.length} puzzles.`);
+  };
+
+  const resetCycleLeaderboard = async () => {
+    if (!supabase) return;
+    const confirmed = window.confirm(
+      `This closes out the previous cycle, grants rewards to eligible top-10 subscribers, and registers Cycle ${currentCycle.cycleNumber} (${launchPuzzles.length} puzzles) as current. Only do this AFTER the new roster is already merged and deployed live. Continue?`,
+    );
+    if (!confirmed) return;
+    setCycleRewardLoading(true);
+    setCycleRewardNotice("");
+    const { data, error } = await supabase.rpc("admin_reset_cycle_leaderboard", {
+      p_new_cycle_number: currentCycle.cycleNumber,
+      p_new_cycle_started_at: currentCycle.startedAt,
+      p_new_cycle_puzzle_ids: launchPuzzles.map((puzzle) => puzzle.id),
+    });
+    setCycleRewardLoading(false);
+    if (error) {
+      setCycleRewardNotice(`The reset could not be completed: ${error.message}`);
+      return;
+    }
+    const results = (data ?? []) as CycleRewardResult[];
+    setCycleRewardResults(results);
+    setCycleRewardNotice(`Cycle closed. ${results.filter((row) => row.weekly_days_granted > 0).length} solver(s) rewarded.`);
   };
 
   const selectAdminTip = (tip: AdminTip) => {
@@ -1071,7 +1111,7 @@ export default function WavefrontApp() {
           <section className="admin-view">
             <div className="page-heading split">
               <div><span className="eyebrow">Owner console</span><h1>Publishing control</h1><p>Review puzzle content, release status, and member access from one place.</p></div>
-              <div className="admin-toolbar"><button className="text-action" onClick={() => void syncLaunchCatalog()} disabled={adminLoading}>Store all 72 puzzles</button><button className="text-action" onClick={() => void loadAdminData()} disabled={adminLoading}>{adminLoading ? "Refreshing..." : "Refresh data"}</button></div>
+              <div className="admin-toolbar"><button className="text-action" onClick={() => void syncLaunchCatalog()} disabled={adminLoading}>Store all {launchPuzzles.length} puzzles</button><button className="text-action" onClick={() => void loadAdminData()} disabled={adminLoading}>{adminLoading ? "Refreshing..." : "Refresh data"}</button></div>
             </div>
             <div className="admin-stats">
               <div><strong>{adminPuzzles.length}</strong><span>catalog puzzles</span></div>
@@ -1121,6 +1161,28 @@ export default function WavefrontApp() {
             <section className="admin-panel member-panel">
               <div className="admin-panel-heading"><div><span className="eyebrow">Feedback inbox</span><h2>What solvers are telling you</h2></div><span>{adminFeedback.length} recent messages</span></div>
               <div className="admin-list">{adminFeedback.length ? adminFeedback.map((item) => <article className="admin-feedback" key={item.id}><strong>{item.issue_type} {item.rating ? `· ${item.rating}/5` : ""}</strong><p>{item.note}</p><small>{item.puzzle_id === "site-feedback" ? "Site feedback" : item.puzzle_id} · {new Date(item.created_at).toLocaleDateString("en-IN")}</small></article>) : <p className="admin-empty">No feedback has arrived yet.</p>}</div>
+            </section>
+            <section className="admin-panel member-panel">
+              <div className="admin-panel-heading"><div><span className="eyebrow">Cycle rewards</span><h2>Leaderboard reset &amp; top-10 grants</h2></div><span>Cycle {currentCycle.cycleNumber}</span></div>
+              <p className="admin-empty">The very first time, click &quot;Register current cycle&quot; to bootstrap Cycle {currentCycle.cycleNumber} in the rewards system. From the next rotation onward, only after a new roster has been merged and deployed live, click &quot;Close cycle &amp; apply rewards&quot; to score the outgoing cycle, grant +7 days to eligible top-10 subscribers (stacking on their existing access), update consecutive-streak counters (6 cycles in a row earns +1 year, escalating by 6 for each further bonus), and register the new cycle.</p>
+              <div className="admin-toolbar">
+                <button className="text-action" onClick={() => void registerCurrentCycle()} disabled={cycleRewardLoading}>Register current cycle</button>
+                <button className="primary-action small" onClick={() => void resetCycleLeaderboard()} disabled={cycleRewardLoading}>{cycleRewardLoading ? "Working..." : "Close cycle & apply rewards"}</button>
+              </div>
+              {cycleRewardNotice && <p className="admin-notice">{cycleRewardNotice}</p>}
+              {cycleRewardResults && (
+                <div className="member-table">
+                  <div className="member-head"><span>Rank</span><span>Score</span><span>Weekly reward</span><span>Streak / bonus</span></div>
+                  {cycleRewardResults.map((row) => (
+                    <div className="member-row" key={row.user_id}>
+                      <span>#{row.rank}</span>
+                      <span>{row.score}</span>
+                      <span>{row.weekly_days_granted ? `+${row.weekly_days_granted} days` : "-"}</span>
+                      <span>{row.streak_after || "-"}{row.streak_milestone_days_granted ? ` · +${row.streak_milestone_days_granted}d bonus!` : ""}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           </section>
         ) : view === "archive" ? (
