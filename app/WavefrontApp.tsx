@@ -1096,6 +1096,24 @@ export default function WavefrontApp() {
                 </div>
               ))}
             </div>
+            <details className="rules-disclosure">
+              <summary>How scoring &amp; rewards work</summary>
+              <div className="rules-disclosure-body">
+                <div>
+                  <span>Scoring</span>
+                  <p>Your score for Cycle {currentCycle.cycleNumber} is Daily puzzle points plus every correct solve from this cycle&apos;s current 90-puzzle roster. Daily easy, moderate, and tough prompts award 20, 50, and 100 points, once each per day. Puzzles from a retired, archived cycle never add to a live cycle&apos;s score.</p>
+                </div>
+                <div>
+                  <span>Weekly reward</span>
+                  <p>When a cycle closes, the top 10 solvers who hold an active pass at that moment each get +7 days of access, stacked on top of whatever access they already have. Ranking well without an active pass earns a spot on the board, not the reward.</p>
+                </div>
+                <div>
+                  <span>Long-streak bonus</span>
+                  <p>Land in the top 10 for 6 cycles in a row (while subscribed each time) and you get +1 year of access on top of the weekly rewards already earned. Miss the top 10, or let your pass lapse for a cycle, and the streak resets — the next bonus after that then needs 12 cycles in a row, then 18, and so on.</p>
+                </div>
+              </div>
+              <p className="rules-disclosure-foot">Rewards apply only to subscribers with an active pass when a cycle closes. A fresh 90-puzzle roster rotates in every two weeks.</p>
+            </details>
           </section>
         ) : view === "feedback" ? (
           <section className="standard-view feedback-view">
