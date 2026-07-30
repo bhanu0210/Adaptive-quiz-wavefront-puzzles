@@ -320,6 +320,15 @@ export default function WavefrontApp() {
 
   useEffect(() => {
     if (!supabase || !authUser) {
+      setSolvedIds([]);
+      return;
+    }
+    void supabase.from("puzzle_progress").select("puzzle_id").eq("user_id", authUser.id).not("solved_at", "is", null)
+      .then(({ data }) => setSolvedIds((data ?? []).map((row) => row.puzzle_id as string)));
+  }, [authUser?.id, streakVersion]);
+
+  useEffect(() => {
+    if (!supabase || !authUser) {
       setWeeklyActivity(buildEmptyWeek());
       setWeeklyChangePct(null);
       return;
@@ -547,10 +556,11 @@ export default function WavefrontApp() {
       setShowSubscribe(true);
       return;
     }
+    const alreadySolved = solvedIds.includes(puzzle.id);
     setActivePuzzle(puzzle);
     setActivePuzzleLabel(label ?? `Verified challenge ${String(livePuzzles.indexOf(puzzle) + 1).padStart(2, "0")}`);
-    setSelectedOption(null);
-    setSubmitted(false);
+    setSelectedOption(alreadySolved ? puzzle.correctOption : null);
+    setSubmitted(alreadySolved);
     setRevealedHints(0);
     setRating(null);
     setFeedbackType("general");
