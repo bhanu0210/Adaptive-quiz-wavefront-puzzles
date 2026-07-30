@@ -147,6 +147,7 @@ export default function WavefrontApp() {
   const [revealedHints, setRevealedHints] = useState(0);
   const [solvedIds, setSolvedIds] = useState<string[]>([]);
   const [solvePoints, setSolvePoints] = useState<Record<string, number>>({});
+  const [progressSyncNotice, setProgressSyncNotice] = useState("");
   const [attemptedIds, setAttemptedIds] = useState<string[]>([]);
   const [adaptiveCategory, setAdaptiveCategory] = useState<(typeof categories)[number]["name"]>("Logic & Knowledge");
   const [adaptiveLevels, setAdaptiveLevels] = useState<Record<string, number>>(Object.fromEntries(categories.map((category) => [category.name, 3])));
@@ -566,6 +567,7 @@ export default function WavefrontApp() {
     setFeedbackType("general");
     setFeedbackNote("");
     setFeedbackNotice("");
+    setProgressSyncNotice("");
     setView("solve");
   };
 
@@ -590,7 +592,18 @@ export default function WavefrontApp() {
       void Promise.all([
         supabase.from("puzzle_progress").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, attempts: 1, hints_used: revealedHints, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" }),
         supabase.from("puzzle_solve_scores").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, points, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" }),
-      ]).then(() => { setStreakVersion((version) => version + 1); setLeaderboardVersion((version) => version + 1); });
+      ]).then(([progressResult, scoreResult]) => {
+        if (progressResult.error) {
+          console.error("puzzle_progress upsert failed", progressResult.error);
+          setSolvedIds((current) => current.filter((id) => id !== activePuzzle.id));
+          setProgressSyncNotice("Your score was saved, but this solve could not be marked complete. It may show as unsolved again after a reload — please try once more.");
+        }
+        if (scoreResult.error) {
+          console.error("puzzle_solve_scores upsert failed", scoreResult.error);
+        }
+        setStreakVersion((version) => version + 1);
+        setLeaderboardVersion((version) => version + 1);
+      });
     }
   };
 
@@ -938,6 +951,7 @@ export default function WavefrontApp() {
                     <span className="result-label">{selectedOption === activePuzzle.correctOption ? "Strong solve" : "Useful miss"}</span>
                     <h2>{selectedOption === activePuzzle.correctOption ? "You found the right path." : `The answer is ${activePuzzle.options[activePuzzle.correctOption]}.`}</h2>
                     <p>{activePuzzle.explanation}</p>
+                    {progressSyncNotice && <small className="daily-notice">{progressSyncNotice}</small>}
                     <div className="takeaway"><strong>Pattern to keep</strong><span>{activePuzzle.takeaway}</span></div>
                     <div className="rating-row">
                       <span>Rate the assigned difficulty</span>
