@@ -596,10 +596,11 @@ export default function WavefrontApp() {
         if (progressResult.error) {
           console.error("puzzle_progress upsert failed", progressResult.error);
           setSolvedIds((current) => current.filter((id) => id !== activePuzzle.id));
-          setProgressSyncNotice("Your score was saved, but this solve could not be marked complete. It may show as unsolved again after a reload — please try once more.");
+          setProgressSyncNotice(`Your score was saved, but this solve could not be marked complete (${progressResult.error.message || progressResult.error.code || "unknown error"}). It may show as unsolved again after a reload.`);
         }
         if (scoreResult.error) {
           console.error("puzzle_solve_scores upsert failed", scoreResult.error);
+          setProgressSyncNotice((current) => `${current} Score save also failed: ${scoreResult.error.message || scoreResult.error.code || "unknown error"}.`.trim());
         }
         setStreakVersion((version) => version + 1);
         setLeaderboardVersion((version) => version + 1);
