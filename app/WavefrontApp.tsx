@@ -148,6 +148,7 @@ export default function WavefrontApp() {
   const [solvedIds, setSolvedIds] = useState<string[]>([]);
   const [solvePoints, setSolvePoints] = useState<Record<string, number>>({});
   const [progressSyncNotice, setProgressSyncNotice] = useState("");
+  const [solvedLoadNotice, setSolvedLoadNotice] = useState("");
   const [attemptedIds, setAttemptedIds] = useState<string[]>([]);
   const [adaptiveCategory, setAdaptiveCategory] = useState<(typeof categories)[number]["name"]>("Logic & Knowledge");
   const [adaptiveLevels, setAdaptiveLevels] = useState<Record<string, number>>(Object.fromEntries(categories.map((category) => [category.name, 3])));
@@ -322,10 +323,19 @@ export default function WavefrontApp() {
   useEffect(() => {
     if (!supabase || !authUser) {
       setSolvedIds([]);
+      setSolvedLoadNotice("");
       return;
     }
     void supabase.from("puzzle_progress").select("puzzle_id").eq("user_id", authUser.id).not("solved_at", "is", null)
-      .then(({ data }) => setSolvedIds((data ?? []).map((row) => row.puzzle_id as string)));
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("puzzle_progress load failed", error);
+          setSolvedLoadNotice(`Your solved puzzles could not be loaded (${error.message || error.code || "unknown error"}). Previously solved puzzles may look unsolved until this is fixed.`);
+          return;
+        }
+        setSolvedLoadNotice("");
+        setSolvedIds((data ?? []).map((row) => row.puzzle_id as string));
+      });
   }, [authUser?.id, streakVersion]);
 
   useEffect(() => {
@@ -1068,6 +1078,7 @@ export default function WavefrontApp() {
         ) : view === "paths" ? (
           <section className="standard-view">
             <div className="page-heading"><span className="eyebrow">Choose your own starting point</span><h1>Explore the paths</h1><p>Pick any challenge from any section. Each solved block guides your next recommended challenge, but you are always free to explore.</p></div>
+            {solvedLoadNotice && <p className="tips-error">{solvedLoadNotice}</p>}
             <div className="path-list">
               {categories.map((category, categoryIndex) => {
                 const categoryPuzzles = livePuzzles.filter((puzzle) => puzzle.category === category.name);
