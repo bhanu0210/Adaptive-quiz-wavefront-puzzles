@@ -316,7 +316,7 @@ export default function WavefrontApp() {
       setStreakDays(0);
       return;
     }
-    void supabase.from("puzzle_progress").select("solved_at").eq("user_id", authUser.id).not("solved_at", "is", null)
+    void supabase.from("puzzle_solve_scores").select("solved_at").eq("user_id", authUser.id).not("solved_at", "is", null)
       .then(({ data }) => setStreakDays(calculateStreak((data ?? []).flatMap((row) => row.solved_at ? [row.solved_at] : []))));
   }, [authUser?.id, streakVersion]);
 
@@ -326,10 +326,10 @@ export default function WavefrontApp() {
       setSolvedLoadNotice("");
       return;
     }
-    void supabase.from("puzzle_progress").select("puzzle_id").eq("user_id", authUser.id).not("solved_at", "is", null)
+    void supabase.from("puzzle_solve_scores").select("puzzle_id").eq("user_id", authUser.id)
       .then(({ data, error }) => {
         if (error) {
-          console.error("puzzle_progress load failed", error);
+          console.error("puzzle_solve_scores load failed", error);
           setSolvedLoadNotice(`Your solved puzzles could not be loaded (${error.message || error.code || "unknown error"}). Previously solved puzzles may look unsolved until this is fixed.`);
           return;
         }
@@ -350,7 +350,7 @@ export default function WavefrontApp() {
       setWeeklyChangePct(null);
       return;
     }
-    void supabase.from("puzzle_progress").select("solved_at").eq("user_id", authUser.id).not("solved_at", "is", null)
+    void supabase.from("puzzle_solve_scores").select("solved_at").eq("user_id", authUser.id).not("solved_at", "is", null)
       .then(({ data }) => {
         const solvedKeys = (data ?? []).flatMap((row) => (row.solved_at ? [indiaDateKey(row.solved_at)] : []));
         const dayAt = (daysAgo: number) => new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
@@ -607,18 +607,25 @@ export default function WavefrontApp() {
     setSolvePoints((current) => ({ ...current, [activePuzzle.id]: points }));
     setMastery((current) => ({ ...current, [activePuzzle.category]: Math.min(100, (current[activePuzzle.category] ?? 0) + points) }));
     if (supabase && authUser) {
+      const asResult = (promise: PromiseLike<{ error: { message?: string; code?: string } | null }>) =>
+        Promise.resolve(promise).catch((thrown): { error: { message?: string; code?: string } } => ({
+          error: { message: thrown instanceof Error ? thrown.message : String(thrown) },
+        }));
       void Promise.all([
-        supabase.from("puzzle_progress").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, attempts: 1, hints_used: revealedHints, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" }),
-        supabase.from("puzzle_solve_scores").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, points, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" }),
+        asResult(supabase.from("puzzle_progress").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, attempts: 1, hints_used: revealedHints, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" })),
+        asResult(supabase.from("puzzle_solve_scores").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, points, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" })),
       ]).then(([progressResult, scoreResult]) => {
+        // puzzle_solve_scores is the table locking/scoring/streaks now read
+        // from (it has proven reliable; puzzle_progress has not), so only
+        // ITS failure should roll back the optimistic local "solved" state.
+        // puzzle_progress is best-effort bookkeeping only at this point.
         if (progressResult.error) {
           console.error("puzzle_progress upsert failed", progressResult.error);
-          setSolvedIds((current) => current.filter((id) => id !== activePuzzle.id));
-          setProgressSyncNotice(`Your score was saved, but this solve could not be marked complete (${progressResult.error.message || progressResult.error.code || "unknown error"}). It may show as unsolved again after a reload.`);
         }
         if (scoreResult.error) {
           console.error("puzzle_solve_scores upsert failed", scoreResult.error);
-          setProgressSyncNotice((current) => `${current} Score save also failed: ${scoreResult.error.message || scoreResult.error.code || "unknown error"}.`.trim());
+          setSolvedIds((current) => current.filter((id) => id !== activePuzzle.id));
+          setProgressSyncNotice(`Your solve could not be saved (${scoreResult.error.message || scoreResult.error.code || "unknown error"}). Please try again.`);
         }
         setStreakVersion((version) => version + 1);
         setLeaderboardVersion((version) => version + 1);
