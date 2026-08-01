@@ -788,7 +788,8 @@ export default function WavefrontApp() {
       .select("id,user_id,author_name,title,category,replies,rating,status,created_at,question,options,correct_option,explanation")
       .single();
     if (error || !data) {
-      setPostNotice("Your puzzle could not be submitted. Please try again.");
+      console.error("community post submit failed", error);
+      setPostNotice(error?.message ? `Your puzzle could not be submitted: ${error.message}` : "Your puzzle could not be submitted. Please try again.");
       return;
     }
     setPosts((current) => [data as CommunityPost, ...current]);
@@ -884,7 +885,8 @@ export default function WavefrontApp() {
       explanation: cycleSubmitExplanation.trim() || null,
     });
     if (error) {
-      setCycleSubmitNotice("Your proposal could not be submitted. Please try again.");
+      console.error("cycle proposal submit failed", error);
+      setCycleSubmitNotice(error.message ? `Your proposal could not be submitted: ${error.message}` : "Your proposal could not be submitted. Please try again.");
       return;
     }
     setCycleSubmitTitle("");
@@ -1676,8 +1678,17 @@ export default function WavefrontApp() {
                 <label>Explanation (optional)<textarea value={postExplanation} onChange={(event) => setPostExplanation(event.target.value)} placeholder="Why is this the right answer?" /></label>
               </>}
             </div>
-            <button className="checkout-button" onClick={() => void addPost()} disabled={!postTitle.trim()}>Send for review <span aria-hidden="true">→</span></button>
-            {postNotice && <small className="feedback-notice">{postNotice}</small>}
+            <button
+              className="checkout-button"
+              onClick={() => void addPost()}
+              disabled={!postTitle.trim() || Boolean(postQuestion.trim()) && (!postOptions.every((option) => option.trim()) || postCorrectOption === null)}
+            >
+              Send for review <span aria-hidden="true">→</span>
+            </button>
+            {postQuestion.trim() && (postCorrectOption === null || !postOptions.every((option) => option.trim())) && (
+              <p className="form-alert">Fill in all four options and mark the correct one, or clear the question to post without a puzzle attached.</p>
+            )}
+            {postNotice && <p className="form-alert">{postNotice}</p>}
           </section>
         </div>
       )}
@@ -1706,8 +1717,17 @@ export default function WavefrontApp() {
               ))}</fieldset>
               <label>Explanation (optional)<textarea value={cycleSubmitExplanation} onChange={(event) => setCycleSubmitExplanation(event.target.value)} placeholder="Why is this the right answer?" /></label>
             </div>
-            <button className="checkout-button" onClick={() => void submitCyclePuzzle()} disabled={!cycleSubmitTitle.trim()}>Send to admin <span aria-hidden="true">→</span></button>
-            {cycleSubmitNotice && <small className="feedback-notice">{cycleSubmitNotice}</small>}
+            <button
+              className="checkout-button"
+              onClick={() => void submitCyclePuzzle()}
+              disabled={!cycleSubmitTitle.trim() || !cycleSubmitQuestion.trim() || !cycleSubmitOptions.every((option) => option.trim()) || cycleSubmitCorrectOption === null}
+            >
+              Send to admin <span aria-hidden="true">→</span>
+            </button>
+            {cycleSubmitTitle.trim() && (!cycleSubmitQuestion.trim() || !cycleSubmitOptions.every((option) => option.trim()) || cycleSubmitCorrectOption === null) && (
+              <p className="form-alert">A cycle proposal needs the question, all four options filled in, and the radio button next to the correct one selected before it can be sent.</p>
+            )}
+            {cycleSubmitNotice && <p className={cycleSubmitNotice.startsWith("Sent") ? "form-alert success" : "form-alert"}>{cycleSubmitNotice}</p>}
           </section>
         </div>
       )}
