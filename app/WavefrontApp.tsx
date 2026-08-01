@@ -43,6 +43,8 @@ const accessPasses: Record<AccessPass, { name: string; price: string; duration: 
   annual: { name: "Annual Pass", price: "₹599", duration: "365 days", description: "Best value for a full year" },
 };
 
+const FREE_TRIAL_SOLVES_PER_CATEGORY = 2;
+
 const categories = [
   { name: "Logic & Knowledge", code: "LK", color: "coral", mastery: 64 },
   { name: "Mathematical Reasoning", code: "MR", color: "blue", mastery: 48 },
@@ -563,6 +565,17 @@ export default function WavefrontApp() {
     return choices.sort((a, b) => Math.abs(a.difficulty - target) - Math.abs(b.difficulty - target))[0] ?? livePuzzles[0];
   }, [livePuzzles, solvedIds, attemptedIds, adaptiveCategory, adaptiveLevels]);
 
+  const freeTrialSolvedByCategory = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const puzzle of livePuzzles) {
+      if (solvedIds.includes(puzzle.id)) counts[puzzle.category] = (counts[puzzle.category] ?? 0) + 1;
+    }
+    return counts;
+  }, [livePuzzles, solvedIds]);
+
+  const canOpenWithoutPass = (puzzle: Puzzle) =>
+    solvedIds.includes(puzzle.id) || (freeTrialSolvedByCategory[puzzle.category] ?? 0) < FREE_TRIAL_SOLVES_PER_CATEGORY;
+
   const leaderboard = useMemo(() => {
     const real = realLeaders.map((player) => ({ name: player.display_name, score: Number(player.score), solved: Number(player.solved_count), streak: 0, isCurrent: player.user_id === authUser?.id }));
     return [...samplePlayers, ...real].sort((a, b) => b.score - a.score || b.solved - a.solved).map((player, index) => ({ ...player, rank: index + 1 }));
@@ -570,7 +583,12 @@ export default function WavefrontApp() {
   const leaders = leaderboard;
 
   const startPuzzle = (puzzle: Puzzle, label?: string) => {
-    if (!hasActivePass) {
+    if (!authUser) {
+      setAuthMessage(`Sign in to try ${FREE_TRIAL_SOLVES_PER_CATEGORY} free questions in every path.`);
+      setShowAuth(true);
+      return;
+    }
+    if (!hasActivePass && !canOpenWithoutPass(puzzle)) {
       setShowSubscribe(true);
       return;
     }
@@ -1092,7 +1110,7 @@ export default function WavefrontApp() {
           </section>
         ) : view === "paths" ? (
           <section className="standard-view">
-            <div className="page-heading"><span className="eyebrow">Choose your own starting point</span><h1>Explore the paths</h1><p>Pick any challenge from any section. Each solved block guides your next recommended challenge, but you are always free to explore.</p></div>
+            <div className="page-heading"><span className="eyebrow">Choose your own starting point</span><h1>Explore the paths</h1><p>{hasActivePass ? "Pick any challenge from any section. Each solved block guides your next recommended challenge, but you are always free to explore." : `Try ${FREE_TRIAL_SOLVES_PER_CATEGORY} questions free in every path, picked for you the same way a subscriber's next challenge is. Solve those and subscribe to keep going.`}</p></div>
             {solvedLoadNotice && <p className="tips-error">{solvedLoadNotice}</p>}
             <div className="path-list">
               {categories.map((category, categoryIndex) => {
@@ -1105,12 +1123,16 @@ export default function WavefrontApp() {
                       <div className="path-progress"><span style={{ width: `${mastery[category.name]}%` }} /></div><small>{mastery[category.name]}% mastery</small>
                     </div>
                     <div className="path-puzzles">
-                      {categoryPuzzles.map((puzzle, index) => (
-                        <button type="button" key={puzzle.id} onClick={() => startPuzzle(puzzle)}>
-                          <span className={solvedIds.includes(puzzle.id) ? "puzzle-dot solved" : "puzzle-dot"}>{solvedIds.includes(puzzle.id) ? "✓" : index + 1}</span>
-                          <span><strong>{puzzle.title}</strong><small>{difficultyLabel(puzzle.difficulty)} · {puzzle.time} min</small></span><span aria-hidden="true">→</span>
-                        </button>
-                      ))}
+                      {categoryPuzzles.map((puzzle, index) => {
+                        const solved = solvedIds.includes(puzzle.id);
+                        const locked = !hasActivePass && !canOpenWithoutPass(puzzle);
+                        return (
+                          <button type="button" className={locked ? "locked" : ""} key={puzzle.id} onClick={() => startPuzzle(puzzle)}>
+                            <span className={solved ? "puzzle-dot solved" : locked ? "puzzle-dot locked" : "puzzle-dot"}>{solved ? "✓" : locked ? "🔒" : index + 1}</span>
+                            <span><strong>{puzzle.title}</strong><small>{locked ? "Subscribe to unlock" : `${difficultyLabel(puzzle.difficulty)} · ${puzzle.time} min`}</small></span><span aria-hidden="true">→</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </section>
                 );
