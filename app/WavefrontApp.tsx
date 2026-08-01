@@ -1100,9 +1100,7 @@ export default function WavefrontApp() {
       return;
     }
     setDailyNotices((current) => ({ ...current, [difficulty]: data?.message ?? "Answer checked." }));
-    if (data?.attempted || data?.alreadyAttempted) {
-      setDailyAttempted((current) => ({ ...current, [difficulty]: true }));
-    }
+    setDailyAttempted((current) => ({ ...current, [difficulty]: true }));
     if (data?.correct) {
       setDailySolved((current) => ({ ...current, [difficulty]: true }));
       setDailyPointsVersion((version) => version + 1);
