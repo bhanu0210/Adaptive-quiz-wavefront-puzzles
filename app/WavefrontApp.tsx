@@ -739,17 +739,26 @@ export default function WavefrontApp() {
     setSolvePoints((current) => ({ ...current, [activePuzzle.id]: points }));
     setMastery((current) => ({ ...current, [activePuzzle.category]: Math.min(100, (current[activePuzzle.category] ?? 0) + points) }));
     if (supabase && authUser) {
-      // puzzle_progress is intentionally not written here anymore: nothing
-      // in the app reads it (locking/scoring/streaks all read
-      // puzzle_solve_scores, which has proven reliable), so it was pure
-      // unused write volume.
-      void Promise.resolve(
-        supabase.from("puzzle_solve_scores").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, points, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" }),
-      )
-        .catch((thrown): { error: { message?: string; code?: string } } => ({
+      // Restored: an earlier change stopped writing to puzzle_progress on
+      // the assumption nothing read it anymore, based only on grepping this
+      // repo's frontend code. That assumption was wrong -- the live
+      // puzzle_leaderboard Supabase function (defined outside this repo,
+      // never visible from here) most likely reads from puzzle_progress,
+      // and removing the write broke real users' leaderboard scores/ranks
+      // even though locking (which reads puzzle_solve_scores) kept working.
+      // Write to both again until puzzle_leaderboard's actual source can be
+      // confirmed.
+      const asResult = (promise: PromiseLike<{ error: { message?: string; code?: string } | null }>) =>
+        Promise.resolve(promise).catch((thrown): { error: { message?: string; code?: string } } => ({
           error: { message: thrown instanceof Error ? thrown.message : String(thrown) },
-        }))
-        .then((scoreResult) => {
+        }));
+      void Promise.all([
+        asResult(supabase.from("puzzle_progress").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, attempts: 1, hints_used: revealedHints, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" })),
+        asResult(supabase.from("puzzle_solve_scores").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, points, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" })),
+      ]).then(([progressResult, scoreResult]) => {
+          if (progressResult.error) {
+            console.error("puzzle_progress upsert failed", progressResult.error);
+          }
           if (scoreResult.error) {
             console.error("puzzle_solve_scores upsert failed", scoreResult.error);
             setSolvedIds((current) => current.filter((id) => id !== activePuzzle.id));
