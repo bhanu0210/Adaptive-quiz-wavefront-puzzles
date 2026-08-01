@@ -7,6 +7,7 @@ import { launchExpansion } from "./data/launch-expansion";
 import { supabase } from "./supabase";
 import { currentCycle, daysUntilNextRotation, rotationProgress } from "./data/cycle-meta";
 import { archivedCycles } from "./data/archive";
+import { learningTips } from "./data/tips";
 
 const launchPuzzles = [...puzzlesData, ...launchExpansion];
 type Puzzle = (typeof launchPuzzles)[number];
@@ -29,9 +30,7 @@ type AdminPuzzle = {
   updated_at: string;
 };
 type AdminMember = { user_id: string; display_name: string; created_at: string; subscription?: { status: string; current_period_end: string | null } };
-type AdminTip = LearningTip & { publication_status: "draft" | "published" | "archived" };
 type AdminPuzzleForm = { title: string; category: string; difficulty: number; time: number; question: string; options: string[]; correctOption: number; hints: string[]; explanation: string; takeaway: string; publication_status: "draft" | "published" };
-type AdminTipForm = { category: string; title: string; body: string; sort_order: number; publication_status: "draft" | "published" | "archived" };
 type FeedbackKind = "general" | "unclear" | "incorrect" | "difficulty" | "suggestion";
 type CommunityPost = {
   id: string; user_id: string; author_name: string; title: string; category: string; replies: number; rating: number | null;
@@ -63,8 +62,6 @@ const categories = [
   { name: "Spatial Reasoning", code: "SR", color: "pink", mastery: 71 },
   { name: "Patterns & Numbers", code: "PN", color: "cyan", mastery: 53 },
 ] as const;
-
-type LearningTip = { id: string; category: string; title: string; body: string; sort_order: number };
 
 function completePuzzlePayload(id: string, stored: Partial<Puzzle>) {
   const source = launchPuzzles.find((puzzle) => puzzle.id === id);
@@ -150,6 +147,26 @@ function SignalField() {
   return <div className="puzzle-illustration" aria-hidden="true" />;
 }
 
+function TipIcon({ code, color }: { code: string; color: string }) {
+  const common = { width: 40, height: 40, viewBox: "0 0 40 40", fill: "none", stroke: color, strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
+  switch (code) {
+    case "LK": // truth table: a small true/false grid
+      return <svg {...common}><rect x="6" y="6" width="28" height="28" rx="3" /><path d="M6 20h28M20 6v28" /><path d="M11 14l3 3 5-6" /><path d="M24 26l6 6M30 26l-6 6" /></svg>;
+    case "MR": // proportion bar split into parts
+      return <svg {...common}><rect x="6" y="16" width="28" height="8" rx="2" /><path d="M17 16v8M25 16v8" /><path d="M20 6v6M14 9l6-3 6 3" /></svg>;
+    case "PS": // branching probability tree
+      return <svg {...common}><circle cx="20" cy="8" r="2.4" fill={color} /><path d="M20 10v6M20 16l-10 8M20 16l10 8" /><circle cx="10" cy="26" r="2.4" fill={color} /><circle cx="30" cy="26" r="2.4" fill={color} /><path d="M10 28v4M30 28v4" /></svg>;
+    case "AO": // shortest-path graph
+      return <svg {...common}><circle cx="8" cy="30" r="2.6" fill={color} /><circle cx="20" cy="10" r="2.6" fill={color} /><circle cx="32" cy="30" r="2.6" fill={color} /><path d="M8 30L20 10L32 30" /><path d="M8 30L32 30" strokeDasharray="3 3" /></svg>;
+    case "SR": // rotating cube
+      return <svg {...common}><path d="M20 6l13 7v14l-13 7-13-7V13z" /><path d="M7 13l13 7 13-7M20 20v14" /></svg>;
+    case "PN": // number sequence with growing gaps
+      return <svg {...common}><circle cx="7" cy="30" r="2.2" fill={color} /><circle cx="16" cy="24" r="2.2" fill={color} /><circle cx="26" cy="15" r="2.2" fill={color} /><circle cx="34" cy="7" r="2.2" fill={color} /><path d="M7 30L16 24L26 15L34 7" strokeDasharray="1 4" /></svg>;
+    default:
+      return null;
+  }
+}
+
 export default function WavefrontApp() {
   const [view, setView] = useState<View>("solve");
   const [activePuzzle, setActivePuzzle] = useState<Puzzle | null>(null);
@@ -215,9 +232,6 @@ export default function WavefrontApp() {
   const [cycleRewardResults, setCycleRewardResults] = useState<CycleRewardResult[] | null>(null);
   const [cycleRewardLoading, setCycleRewardLoading] = useState(false);
   const [cycleRewardNotice, setCycleRewardNotice] = useState("");
-  const [adminTips, setAdminTips] = useState<AdminTip[]>([]);
-  const [adminSelectedTipId, setAdminSelectedTipId] = useState<string | null>(null);
-  const [adminTipForm, setAdminTipForm] = useState<AdminTipForm | null>(null);
   const [contentOverrides, setContentOverrides] = useState<Record<string, Partial<Puzzle>>>({});
   const [dailyBrief, setDailyBrief] = useState<DailyBrief | null>(null);
   const [dailyBriefError, setDailyBriefError] = useState(false);
@@ -228,9 +242,6 @@ export default function WavefrontApp() {
   const [dailyChecking, setDailyChecking] = useState<string | null>(null);
   const [dailyPoints, setDailyPoints] = useState(0);
   const [dailyPointsVersion, setDailyPointsVersion] = useState(0);
-  const [learningTips, setLearningTips] = useState<LearningTip[]>([]);
-  const [tipsLoading, setTipsLoading] = useState(false);
-  const [tipsError, setTipsError] = useState("");
   const [streakDays, setStreakDays] = useState(0);
   const [streakVersion, setStreakVersion] = useState(0);
   const [weeklyActivity, setWeeklyActivity] = useState(buildEmptyWeek);
@@ -339,24 +350,6 @@ export default function WavefrontApp() {
     else if (daysRemaining > 1 && daysRemaining <= 2) setExpiryNotice(2);
     else setExpiryNotice(null);
   }, [accessUntil, isAdmin]);
-
-  useEffect(() => {
-    if (!supabase || !hasActivePass) {
-      setLearningTips([]);
-      setTipsError("");
-      return;
-    }
-    setTipsLoading(true);
-    void (async () => {
-      const { data, error } = await supabase.from("puzzle_learning_tips").select("id,category,title,body,sort_order").eq("publication_status", "published").order("category").order("sort_order");
-      if (error) {
-        setTipsError("The learning library could not be loaded. Please refresh once.");
-      } else {
-        setLearningTips((data ?? []) as LearningTip[]);
-      }
-      setTipsLoading(false);
-    })();
-  }, [authUser?.id, hasActivePass]);
 
   useEffect(() => {
     if (!supabase || !authUser) {
@@ -471,11 +464,10 @@ export default function WavefrontApp() {
   const loadAdminData = async () => {
     if (!supabase || !isAdmin) return;
     setAdminLoading(true);
-    const [catalogResult, profilesResult, subscriptionsResult, tipsResult, feedbackResult, cycleSubmissionsResult] = await Promise.all([
+    const [catalogResult, profilesResult, subscriptionsResult, feedbackResult, cycleSubmissionsResult] = await Promise.all([
       supabase.from("puzzle_catalog").select("id,title,path,difficulty,expected_minutes,access_level,publication_status,payload,updated_at").order("updated_at", { ascending: false }),
       supabase.from("puzzle_profiles").select("user_id,display_name,created_at").order("created_at", { ascending: false }),
       supabase.from("puzzle_subscriptions").select("user_id,status,current_period_end"),
-      supabase.from("puzzle_learning_tips").select("id,category,title,body,sort_order,publication_status").order("category").order("sort_order"),
       supabase.from("puzzle_feedback").select("id,user_id,puzzle_id,issue_type,rating,note,created_at").order("created_at", { ascending: false }).limit(100),
       supabase.from("puzzle_cycle_submissions").select("id,user_id,author_name,title,category,question,options,correct_option,explanation,status,created_at").order("created_at", { ascending: false }),
     ]);
@@ -487,7 +479,6 @@ export default function WavefrontApp() {
       const subscriptions = new Map((subscriptionsResult.data ?? []).map((row) => [row.user_id, { status: row.status, current_period_end: row.current_period_end }]));
       setAdminMembers(profilesResult.data.map((profile) => ({ ...profile, subscription: subscriptions.get(profile.user_id) })));
     }
-    if (tipsResult.data) setAdminTips(tipsResult.data as AdminTip[]);
     if (feedbackResult.data) setAdminFeedback(feedbackResult.data as AdminFeedback[]);
     if (cycleSubmissionsResult.data) setAdminCycleSubmissions(cycleSubmissionsResult.data as CycleSubmission[]);
     setAdminLoading(false);
@@ -611,33 +602,6 @@ export default function WavefrontApp() {
     setCycleRewardNotice(`Cycle closed. ${results.filter((row) => row.weekly_days_granted > 0).length} solver(s) rewarded.`);
   };
 
-  const selectAdminTip = (tip: AdminTip) => {
-    setAdminSelectedTipId(tip.id);
-    setAdminTipForm({ category: tip.category, title: tip.title, body: tip.body, sort_order: tip.sort_order, publication_status: tip.publication_status });
-    setAdminNotice("");
-  };
-
-  const createAdminTip = () => {
-    setAdminSelectedTipId("new");
-    setAdminTipForm({ category: "Logic & Knowledge", title: "New learning tip", body: "Write a clear, reusable method that helps a solver tackle similar puzzles.", sort_order: 99, publication_status: "draft" });
-    setAdminNotice("");
-  };
-
-  const saveAdminTip = async () => {
-    if (!supabase || !adminSelectedTipId || !adminTipForm) return;
-    try {
-      const row = { category: adminTipForm.category, title: adminTipForm.title.trim(), body: adminTipForm.body.trim(), sort_order: adminTipForm.sort_order, publication_status: adminTipForm.publication_status };
-      if (!row.title || !row.body) throw new Error("Missing required fields");
-      const { error } = adminSelectedTipId === "new"
-        ? await supabase.from("puzzle_learning_tips").insert(row)
-        : await supabase.from("puzzle_learning_tips").update(row).eq("id", adminSelectedTipId);
-      if (error) throw error;
-      setAdminNotice("Learning tip saved.");
-      await loadAdminData();
-    } catch {
-      setAdminNotice("Give the learning tip a title and clear explanation before saving.");
-    }
-  };
 
   // How hard a puzzle actually plays, per real subscriber feedback -- used
   // ONLY to steer the adaptive picker. A puzzle's publicly shown difficulty
@@ -1328,7 +1292,7 @@ export default function WavefrontApp() {
         ) : view === "tips" ? (
           <section className="standard-view tips-view">
             <div className="page-heading split"><div><span className="eyebrow">Members learning library</span><h1>Methods that travel</h1><p>Short, reusable techniques drawn from the puzzle paths. Updated as new releases arrive.</p></div>{!hasActivePass && <button className="subscribe-button" onClick={() => setShowSubscribe(true)}>Unlock learning library</button>}</div>
-            {hasActivePass ? <div className="tips-library">{tipsLoading ? <p>Loading your learning library...</p> : tipsError ? <p className="tips-error">{tipsError}</p> : categories.map((category) => { const pathTips = learningTips.filter((tip) => tip.category === category.name); return <section className="tips-chapter" key={category.name}><div><span className={`path-code ${category.color}`}>{category.code}</span><h2>{category.name}</h2><p>{pathTips.length} reusable methods</p></div><div className="tips-grid">{pathTips.map((tip) => <article className="tip-card" key={tip.id}><h3>{tip.title}</h3><p>{tip.body}</p></article>)}</div></section>; })}</div> : <section className="tips-locked"><span className="eyebrow">Subscriber access</span><h2>Build a toolkit, not just a score.</h2><p>Members can use the complete, growing tips library across logic, maths, strategy, algorithms, spatial reasoning, and patterns.</p><button className="checkout-button" onClick={() => setShowSubscribe(true)}>Get full access <span aria-hidden="true">→</span></button></section>}
+            {hasActivePass ? <div className="tips-library">{categories.map((category) => { const pathTips = learningTips.filter((tip) => tip.category === category.name); return <section className="tips-chapter" key={category.name}><div><span className={`path-code ${category.color}`}>{category.code}</span><TipIcon code={category.code} color={`var(--${category.color})`} /><h2>{category.name}</h2><p>{pathTips.length} reusable methods</p></div><div className="tips-grid">{pathTips.map((tip) => <article className="tip-card" key={tip.id}><h3>{tip.title}</h3><p>{tip.body}</p></article>)}</div></section>; })}</div> : <section className="tips-locked"><span className="eyebrow">Subscriber access</span><h2>Build a toolkit, not just a score.</h2><p>Members can use the complete, growing tips library across logic, maths, strategy, algorithms, spatial reasoning, and patterns.</p><button className="checkout-button" onClick={() => setShowSubscribe(true)}>Get full access <span aria-hidden="true">→</span></button></section>}
             {hasActivePass && <section className="tips-workshop"><div className="page-heading"><span className="eyebrow">Worked examples</span><h2>See each method used once.</h2><p>Use these tiny examples as a warm-up, then carry the same move into the full puzzles.</p></div><div className="tips-workshop-grid"><article><span>Logic</span><h3>Use the reverse check</h3><p><b>If A then B.</b> If B is false, A cannot be true. This is the fastest way to remove an impossible option.</p><code>A → B · not B → not A</code></article><article><span>Logic</span><h3>Fill forced slots first</h3><p>If A cannot be seat 1 and B must be seat 1, A must take one of the remaining seats. Write forced facts before guessing.</p><code>B = 1 · A ≠ 1</code></article><article><span>Logic</span><h3>Split into every case</h3><p>If a source might answer truthfully, falsely, or randomly, check what your conclusion means in each of those cases, not just the likely one.</p><code>case 1 · case 2 → same answer</code></article><article><span>Maths</span><h3>Make percentages small</h3><p>Thirty percent of 80 is three groups of eight. Turn a percentage into a friendlier multiplication.</p><code>30% of 80 = 3 × 8 = 24</code></article><article><span>Maths</span><h3>Undo the change</h3><p>After a 20% discount, 80 is only 80% of the original price. Divide by 0.8 to travel backwards.</p><code>80 ÷ 0.8 = 100</code></article><article><span>Maths</span><h3>Turn work into a rate</h3><p>A pipe that fills a tank in 6 hours does 1/6 of the tank every hour. Add hourly rates together, then invert the total to find combined time.</p><code>1/6 + 1/3 = 1/2 → 2 h</code></article><article><span>Strategy</span><h3>Count equal cases</h3><p>With three equally likely doors, one hides the prize and two do not. Count the outcomes before trusting intuition.</p><code>1 win / 3 cases</code></article><article><span>Strategy</span><h3>Use new information</h3><p>When one losing door opens, do not forget the host gave information. Recalculate instead of treating the choice as fresh.</p><code>switch = 2 winning cases</code></article><article><span>Strategy</span><h3>Weight the branches</h3><p>When an outcome depends on how likely each scenario really is, multiply every payoff by its own probability before comparing totals.</p><code>0.99 × big ≫ 0.01 × small</code></article><article><span>Algorithms</span><h3>Look at the gaps</h3><p>The sequence 1, 3, 6, 10 has gaps of 2, 3, and 4. The next gap is 5, so the next term is 15.</p><code>+2 · +3 · +4 · +5</code></article><article><span>Algorithms</span><h3>Keep the invariant</h3><p>On a chequerboard, every domino covers one light and one dark square. If unequal colours remain, tiling is impossible.</p><code>light = dark is required</code></article><article><span>Algorithms</span><h3>Split into three, not two</h3><p>A balance scale gives three answers: left, right, or even. Split candidates into three even groups so every answer removes useful ground.</p><code>3 groups → 2 weighings find 1 of 8</code></article><article><span>Spatial</span><h3>Anchor one corner</h3><p>Before rotating a shape, mark its top-left corner in your mind. Track that anchor rather than trying to rotate everything at once.</p><code>anchor → rotate → compare</code></article><article><span>Spatial</span><h3>Count by position</h3><p>For a painted cube, corner cubes, edge cubes, and face cubes have different numbers of painted sides. Count each group separately.</p><code>corners · edges · faces</code></article><article><span>Spatial</span><h3>Unroll the curve</h3><p>A shortest path across a curved surface, like a cylinder, becomes an ordinary straight line once you unroll that surface flat.</p><code>unroll → straight line → Pythagoras</code></article><article><span>Patterns</span><h3>Make a difference table</h3><p>For 2, 6, 12, 20, the gaps are 4, 6, 8. The next gap is 10, so the next number is 30.</p><code>2 → 6 → 12 → 20 → 30</code></article><article><span>Patterns</span><h3>Test tiny inputs</h3><p>When a rule uses n, try n = 1, 2, and 3. Small examples reveal whether the rule really holds.</p><code>test → compare → generalise</code></article><article><span>Patterns</span><h3>Check the step sizes</h3><p>If a sequence is not a simple sum or product, list what is added at each step. Those step sizes can form their own easy pattern.</p><code>+2 +3 +4 +5 +6 → next +7</code></article></div></section>}
           </section>
         ) : view === "leaderboard" ? (
@@ -1421,16 +1385,11 @@ export default function WavefrontApp() {
                 {adminNotice && <p className="admin-notice">{adminNotice}</p>}
               </section>
             </div>
-            <div className="admin-grid">
-              <section className="admin-panel">
-                <div className="admin-panel-heading"><div><span className="eyebrow">Learning library</span><h2>Edit subscriber tips</h2></div><button className="text-action" onClick={createAdminTip}>New tip</button></div>
-                <div className="admin-list">{adminTips.map((tip) => <button className={adminSelectedTipId === tip.id ? "admin-row selected" : "admin-row"} key={tip.id} onClick={() => selectAdminTip(tip)}><span><strong>{tip.title}</strong><small>{tip.category}</small></span><em className={tip.publication_status === "published" ? "status-live" : "status-draft"}>{tip.publication_status}</em></button>)}</div>
-              </section>
-              <section className="admin-panel editor-panel">
-                <div className="admin-panel-heading"><div><span className="eyebrow">Tip editor</span><h2>{adminSelectedTipId ? adminTips.find((tip) => tip.id === adminSelectedTipId)?.title : "Select a learning tip"}</h2></div></div>
-                {adminSelectedTipId && adminTipForm ? <div className="content-form"><label>Title<input value={adminTipForm.title} onChange={(event) => setAdminTipForm({ ...adminTipForm, title: event.target.value })} /></label><div className="content-form-row"><label>Path<select value={adminTipForm.category} onChange={(event) => setAdminTipForm({ ...adminTipForm, category: event.target.value })}>{categories.map((category) => <option key={category.name}>{category.name}</option>)}</select></label><label>Order<input type="number" min="1" value={adminTipForm.sort_order} onChange={(event) => setAdminTipForm({ ...adminTipForm, sort_order: Number(event.target.value) })} /></label><label>Status<select value={adminTipForm.publication_status} onChange={(event) => setAdminTipForm({ ...adminTipForm, publication_status: event.target.value as AdminTipForm["publication_status"] })}><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></label></div><label>Learning method<textarea value={adminTipForm.body} onChange={(event) => setAdminTipForm({ ...adminTipForm, body: event.target.value })} /></label><button className="primary-action small" onClick={() => void saveAdminTip()}>Save tip</button></div> : <p className="admin-empty">Choose a learning tip to edit it.</p>}
-              </section>
-            </div>
+            <section className="admin-panel member-panel">
+              <div className="admin-panel-heading"><div><span className="eyebrow">Learning library</span><h2>Tips now live in the codebase</h2></div><span>{learningTips.length} tips across {categories.length} paths</span></div>
+              <p className="admin-empty">Tips moved from Supabase to <code>app/data/tips.ts</code> so the Tips page can never fail to load. To add or edit a tip, describe the change and it ships through a PR, same as puzzle rotation.</p>
+              <div className="admin-list">{learningTips.map((tip) => <article className="admin-feedback" key={tip.id}><strong>{tip.title} <small>· {tip.category}</small></strong><p>{tip.body}</p></article>)}</div>
+            </section>
             <section className="admin-panel member-panel">
               <div className="admin-panel-heading"><div><span className="eyebrow">Subscribers</span><h2>Access overview</h2></div><span>{adminMembers.length} signed-in members</span></div>
               <div className="member-table"><div className="member-head"><span>Member</span><span>Joined</span><span>Access</span><span>Pass ends</span></div>{adminMembers.map((member) => <div className="member-row" key={member.user_id}><span><strong>{member.display_name}</strong><small>{member.user_id.slice(0, 8)}</small></span><span>{new Date(member.created_at).toLocaleDateString("en-IN")}</span><span>{member.subscription?.status ?? "inactive"}</span><span>{member.subscription?.current_period_end ? new Date(member.subscription.current_period_end).toLocaleDateString("en-IN") : "-"}</span></div>)}</div>
