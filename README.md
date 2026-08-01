@@ -11,7 +11,7 @@ probability, optimization, spatial thinking, and number patterns.
 - Mastery, streak, activity, and leaderboard views
 - Community discussions and moderated puzzle submissions
 - Cross-link to [Wavefront Daily](https://wavefrontdaily.in)
-- ₹99 monthly membership checkout surface
+- ₹69 monthly / ₹599 annual membership checkout surface
 
 The checkout is intentionally inactive until Razorpay credentials and webhook
 verification are connected.

@@ -39,8 +39,8 @@ type RealLeader = { user_id: string; display_name: string; score: number; solved
 type AdminFeedback = { id: string; user_id: string; puzzle_id: string; issue_type: string; rating: number | null; note: string; created_at: string };
 
 const accessPasses: Record<AccessPass, { name: string; price: string; duration: string; description: string }> = {
-  monthly: { name: "30-Day Pass", price: "₹99", duration: "30 days", description: "Full access for one month" },
-  annual: { name: "Annual Pass", price: "₹799", duration: "365 days", description: "Best value for a full year" },
+  monthly: { name: "30-Day Pass", price: "₹69", duration: "30 days", description: "Full access for one month" },
+  annual: { name: "Annual Pass", price: "₹599", duration: "365 days", description: "Best value for a full year" },
 };
 
 const categories = [
