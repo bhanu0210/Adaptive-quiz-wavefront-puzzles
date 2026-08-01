@@ -1361,6 +1361,7 @@ export default function WavefrontApp() {
             <div className="podium">
               {[leaders[1], leaders[0], leaders[2]].map((leader, index) => (
                 <div className={`podium-place place-${index}`} key={leader.name}>
+                  <span className="podium-medal" aria-hidden="true">{["🥈", "🥇", "🥉"][index]}</span>
                   <span className="podium-avatar">{leader.name.split(" ").map((part) => part[0]).join("")}</span>
                   <strong>{leader.name}</strong><span>{leader.score.toLocaleString()} pts</span><div>{leader.rank}</div>
                 </div>
