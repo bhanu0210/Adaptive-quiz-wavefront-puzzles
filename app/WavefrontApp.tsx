@@ -958,7 +958,17 @@ export default function WavefrontApp() {
           <div className={streakDays >= 7 ? "streak-pill streak-goal" : "streak-pill"} title="Consecutive days with at least one correct solve">
             <span className="streak-dot" /><strong>{streakDays}</strong> day streak
           </div>
-          <button className="subscribe-button" onClick={() => setShowSubscribe(true)}>{accessUntil && new Date(accessUntil).getTime() > Date.now() ? "Pass active" : "Get full access"}</button>
+          <button
+            className="subscribe-button"
+            onClick={() => setShowSubscribe(true)}
+            title={accessUntil && new Date(accessUntil).getTime() > Date.now() ? `Full access until ${new Date(accessUntil).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}` : undefined}
+          >
+            {isAdmin
+              ? "Admin access"
+              : accessUntil && new Date(accessUntil).getTime() > Date.now()
+                ? `Active till ${new Date(accessUntil).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+                : "Get full access"}
+          </button>
           {authUser ? (
             <button className="account-button" onClick={signOut} title="Sign out">
               <span>{authUser.email?.slice(0, 2).toUpperCase() ?? "ME"}</span>
