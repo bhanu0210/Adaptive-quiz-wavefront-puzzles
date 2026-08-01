@@ -163,6 +163,7 @@ export default function WavefrontApp() {
   const [checkoutNotice, setCheckoutNotice] = useState("");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [accessUntil, setAccessUntil] = useState<string | null>(null);
+  const [expiryNotice, setExpiryNotice] = useState<1 | 2 | null>(null);
   const [rating, setRating] = useState<number | null>(null);
   const [feedbackType, setFeedbackType] = useState<FeedbackKind>("general");
   const [feedbackNote, setFeedbackNote] = useState("");
@@ -295,6 +296,17 @@ export default function WavefrontApp() {
 
   const isAdmin = authUser?.email?.toLowerCase() === "cbaforcat2017@gmail.com";
   const hasActivePass = isAdmin || Boolean(accessUntil && new Date(accessUntil).getTime() > Date.now());
+
+  useEffect(() => {
+    if (isAdmin || !accessUntil) {
+      setExpiryNotice(null);
+      return;
+    }
+    const daysRemaining = (new Date(accessUntil).getTime() - Date.now()) / (24 * 60 * 60 * 1000);
+    if (daysRemaining > 0 && daysRemaining <= 1) setExpiryNotice(1);
+    else if (daysRemaining > 1 && daysRemaining <= 2) setExpiryNotice(2);
+    else setExpiryNotice(null);
+  }, [accessUntil, isAdmin]);
 
   useEffect(() => {
     if (!supabase || !hasActivePass) {
@@ -1370,6 +1382,18 @@ export default function WavefrontApp() {
           </button>
         ))}
       </nav>
+
+      {expiryNotice && !showSubscribe && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setExpiryNotice(null)}>
+          <section className="subscribe-modal expiry-modal" role="dialog" aria-modal="true" aria-labelledby="expiry-title" onMouseDown={(event) => event.stopPropagation()}>
+            <button className="modal-close" aria-label="Close" onClick={() => setExpiryNotice(null)}>×</button>
+            <AppMark /><span className="expiry-badge">Pass expiring</span>
+            <h2 id="expiry-title">{expiryNotice === 1 ? "Your pass expires tomorrow." : "Your pass expires in 2 days."}</h2>
+            <p>Renew now to keep uninterrupted access to every adaptive path, the fortnightly puzzle drops, and community rankings.</p>
+            <button className="checkout-button" onClick={() => { setExpiryNotice(null); setShowSubscribe(true); }}>Renew access <span aria-hidden="true">→</span></button>
+          </section>
+        </div>
+      )}
 
       {showSubscribe && (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setShowSubscribe(false)}>
