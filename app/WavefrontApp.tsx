@@ -53,6 +53,7 @@ const accessPasses: Record<AccessPass, { name: string; price: string; duration: 
 };
 
 const FREE_TRIAL_SOLVES_PER_CATEGORY = 2;
+const MIN_RATINGS_FOR_REMAP = 3;
 
 const categories = [
   { name: "Logic & Knowledge", code: "LK", color: "coral", mastery: 64 },
@@ -162,8 +163,8 @@ export default function WavefrontApp() {
   const [solvedLoadNotice, setSolvedLoadNotice] = useState("");
   const [trialViewedIds, setTrialViewedIds] = useState<string[]>([]);
   const [attemptedIds, setAttemptedIds] = useState<string[]>([]);
-  const [adaptiveCategory, setAdaptiveCategory] = useState<(typeof categories)[number]["name"]>("Logic & Knowledge");
-  const [adaptiveLevels, setAdaptiveLevels] = useState<Record<string, number>>(Object.fromEntries(categories.map((category) => [category.name, 3])));
+  const [adaptiveLevels, setAdaptiveLevels] = useState<Record<string, number>>(Object.fromEntries(categories.map((category) => [category.name, 1])));
+  const [difficultyRatings, setDifficultyRatings] = useState<Record<string, { avg: number; count: number }>>({});
   const [mastery, setMastery] = useState<Record<string, number>>(
     Object.fromEntries(categories.map((category) => [category.name, 0])),
   );
@@ -278,6 +279,15 @@ export default function WavefrontApp() {
       setContentOverrides(Object.fromEntries(data.map((record) => [record.id, completePuzzlePayload(record.id, (record.payload ?? {}) as Partial<Puzzle>)])));
     });
   }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    void supabase.rpc("puzzle_difficulty_ratings_summary").then(({ data, error }) => {
+      if (error) { console.error("puzzle_difficulty_ratings_summary failed", error); return; }
+      const rows = (data ?? []) as { puzzle_id: string; avg_rating: number; rating_count: number }[];
+      setDifficultyRatings(Object.fromEntries(rows.map((row) => [row.puzzle_id, { avg: Number(row.avg_rating), count: row.rating_count }])));
+    });
+  }, [streakVersion]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -629,14 +639,37 @@ export default function WavefrontApp() {
     }
   };
 
+  // How hard a puzzle actually plays, per real subscriber feedback -- used
+  // ONLY to steer the adaptive picker. A puzzle's publicly shown difficulty
+  // label always stays exactly as authored; this never touches it. Falls
+  // back to the authored difficulty until enough ratings exist to trust.
+  const effectiveDifficultyById = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const puzzle of livePuzzles) {
+      const summary = difficultyRatings[puzzle.id];
+      map[puzzle.id] = summary && summary.count >= MIN_RATINGS_FOR_REMAP
+        ? Math.min(5, Math.max(1, Math.round(summary.avg)))
+        : puzzle.difficulty;
+    }
+    return map;
+  }, [livePuzzles, difficultyRatings]);
+
+  // The loop advances one tier at a time across ALL 6 paths together,
+  // rather than mastering one path before starting the next: whichever
+  // path is furthest behind (lowest current level) is always served next,
+  // so everyone works through "easy" everywhere before "tough" anywhere.
+  const nextAdaptiveCategory = useMemo(() => {
+    return [...categories].sort((a, b) => (adaptiveLevels[a.name] ?? 1) - (adaptiveLevels[b.name] ?? 1))[0].name;
+  }, [adaptiveLevels]);
+
   const recommendedPuzzle = useMemo(() => {
     const unsolved = livePuzzles.filter((puzzle) => !solvedIds.includes(puzzle.id));
-    const inCurrentPath = unsolved.filter((puzzle) => puzzle.category === adaptiveCategory);
+    const inCurrentPath = unsolved.filter((puzzle) => puzzle.category === nextAdaptiveCategory);
     const fresh = inCurrentPath.filter((puzzle) => !attemptedIds.includes(puzzle.id));
     const choices = fresh.length ? fresh : (inCurrentPath.length ? inCurrentPath : unsolved);
-    const target = adaptiveLevels[adaptiveCategory] ?? 3;
-    return choices.sort((a, b) => Math.abs(a.difficulty - target) - Math.abs(b.difficulty - target))[0] ?? livePuzzles[0];
-  }, [livePuzzles, solvedIds, attemptedIds, adaptiveCategory, adaptiveLevels]);
+    const target = adaptiveLevels[nextAdaptiveCategory] ?? 1;
+    return choices.sort((a, b) => Math.abs(effectiveDifficultyById[a.id] - target) - Math.abs(effectiveDifficultyById[b.id] - target))[0] ?? livePuzzles[0];
+  }, [livePuzzles, solvedIds, attemptedIds, nextAdaptiveCategory, adaptiveLevels, effectiveDifficultyById]);
 
   const freeTrialUsedByCategory = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -692,8 +725,8 @@ export default function WavefrontApp() {
     setSubmitted(true);
     const correct = selectedOption === activePuzzle.correctOption;
     const category = activePuzzle.category as (typeof categories)[number]["name"];
-    const nextDifficulty = correct && revealedHints === 0 ? Math.min(5, activePuzzle.difficulty + 1) : Math.max(1, activePuzzle.difficulty - 1);
-    setAdaptiveCategory(category);
+    const solvedDifficulty = effectiveDifficultyById[activePuzzle.id] ?? activePuzzle.difficulty;
+    const nextDifficulty = correct && revealedHints === 0 ? Math.min(5, solvedDifficulty + 1) : Math.max(1, solvedDifficulty - 1);
     setAdaptiveLevels((current) => ({ ...current, [category]: nextDifficulty }));
     setAttemptedIds((current) => current.includes(activePuzzle.id) ? current : [...current, activePuzzle.id]);
     if (supabase && authUser) {
@@ -1208,7 +1241,7 @@ export default function WavefrontApp() {
                 <button onClick={() => startPuzzle(recommendedPuzzle)}>Start solving <span aria-hidden="true">→</span></button>
               </div>
               <SignalField />
-              <div className="feature-score"><span>Next level</span><strong>{adaptiveLevels[recommendedPuzzle.category] ?? 3}/5</strong></div>
+              <div className="feature-score"><span>Next level</span><strong>{adaptiveLevels[recommendedPuzzle.category] ?? 1}/5</strong></div>
             </div>
             <div className="lower-grid">
               <section className="activity-panel">
