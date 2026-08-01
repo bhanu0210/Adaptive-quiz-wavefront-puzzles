@@ -151,6 +151,7 @@ export default function WavefrontApp() {
   const [solvePoints, setSolvePoints] = useState<Record<string, number>>({});
   const [progressSyncNotice, setProgressSyncNotice] = useState("");
   const [solvedLoadNotice, setSolvedLoadNotice] = useState("");
+  const [trialViewedIds, setTrialViewedIds] = useState<string[]>([]);
   const [attemptedIds, setAttemptedIds] = useState<string[]>([]);
   const [adaptiveCategory, setAdaptiveCategory] = useState<(typeof categories)[number]["name"]>("Logic & Knowledge");
   const [adaptiveLevels, setAdaptiveLevels] = useState<Record<string, number>>(Object.fromEntries(categories.map((category) => [category.name, 3])));
@@ -343,6 +344,19 @@ export default function WavefrontApp() {
         // stale response wipe out a puzzle solved moments earlier.
         const loaded = (data ?? []).map((row) => row.puzzle_id as string);
         setSolvedIds((current) => Array.from(new Set([...current, ...loaded])));
+      });
+  }, [authUser?.id]);
+
+  useEffect(() => {
+    if (!supabase || !authUser) {
+      setTrialViewedIds([]);
+      return;
+    }
+    void supabase.from("puzzle_trial_views").select("puzzle_id").eq("user_id", authUser.id)
+      .then(({ data, error }) => {
+        if (error) { console.error("puzzle_trial_views load failed", error); return; }
+        const loaded = (data ?? []).map((row) => row.puzzle_id as string);
+        setTrialViewedIds((current) => Array.from(new Set([...current, ...loaded])));
       });
   }, [authUser?.id]);
 
@@ -565,16 +579,19 @@ export default function WavefrontApp() {
     return choices.sort((a, b) => Math.abs(a.difficulty - target) - Math.abs(b.difficulty - target))[0] ?? livePuzzles[0];
   }, [livePuzzles, solvedIds, attemptedIds, adaptiveCategory, adaptiveLevels]);
 
-  const freeTrialSolvedByCategory = useMemo(() => {
+  const freeTrialUsedByCategory = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const puzzle of livePuzzles) {
-      if (solvedIds.includes(puzzle.id)) counts[puzzle.category] = (counts[puzzle.category] ?? 0) + 1;
+      if (solvedIds.includes(puzzle.id) || trialViewedIds.includes(puzzle.id)) {
+        counts[puzzle.category] = (counts[puzzle.category] ?? 0) + 1;
+      }
     }
     return counts;
-  }, [livePuzzles, solvedIds]);
+  }, [livePuzzles, solvedIds, trialViewedIds]);
 
   const canOpenWithoutPass = (puzzle: Puzzle) =>
-    solvedIds.includes(puzzle.id) || (freeTrialSolvedByCategory[puzzle.category] ?? 0) < FREE_TRIAL_SOLVES_PER_CATEGORY;
+    solvedIds.includes(puzzle.id) || trialViewedIds.includes(puzzle.id) ||
+    (freeTrialUsedByCategory[puzzle.category] ?? 0) < FREE_TRIAL_SOLVES_PER_CATEGORY;
 
   const leaderboard = useMemo(() => {
     const real = realLeaders.map((player) => ({ name: player.display_name, score: Number(player.score), solved: Number(player.solved_count), streak: 0, isCurrent: player.user_id === authUser?.id }));
@@ -591,6 +608,11 @@ export default function WavefrontApp() {
     if (!hasActivePass && !canOpenWithoutPass(puzzle)) {
       setShowSubscribe(true);
       return;
+    }
+    if (!hasActivePass && !solvedIds.includes(puzzle.id) && !trialViewedIds.includes(puzzle.id) && supabase) {
+      setTrialViewedIds((current) => [...current, puzzle.id]);
+      void supabase.from("puzzle_trial_views").upsert({ user_id: authUser.id, puzzle_id: puzzle.id }, { onConflict: "user_id,puzzle_id" })
+        .then(({ error }) => { if (error) console.error("puzzle_trial_views upsert failed", error); });
     }
     const alreadySolved = solvedIds.includes(puzzle.id);
     setActivePuzzle(puzzle);
