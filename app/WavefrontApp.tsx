@@ -42,6 +42,7 @@ type CycleSubmission = {
   id: string; user_id: string; author_name: string; title: string; category: string; question: string;
   options: string[]; correct_option: number; explanation: string | null; status: "submitted" | "approved" | "rejected"; created_at: string;
 };
+type CommunityComment = { id: string; post_id: string; user_id: string; author_name: string; body: string; created_at: string };
 type CycleRewardResult = { user_id: string; rank: number; score: number; was_subscribed: boolean; weekly_days_granted: number; streak_after: number; streak_milestone_days_granted: number };
 type RealLeader = { user_id: string; display_name: string; score: number; solved_count: number };
 type AdminFeedback = { id: string; user_id: string; puzzle_id: string; issue_type: string; rating: number | null; note: string; created_at: string };
@@ -205,6 +206,11 @@ export default function WavefrontApp() {
   const [postCorrectOption, setPostCorrectOption] = useState<number | null>(null);
   const [postExplanation, setPostExplanation] = useState("");
   const [postNotice, setPostNotice] = useState("");
+  const [openThreadId, setOpenThreadId] = useState<string | null>(null);
+  const [threadComments, setThreadComments] = useState<Record<string, CommunityComment[]>>({});
+  const [threadLoading, setThreadLoading] = useState<Record<string, boolean>>({});
+  const [threadDrafts, setThreadDrafts] = useState<Record<string, string>>({});
+  const [threadNotice, setThreadNotice] = useState<Record<string, string>>({});
   const [showCycleSubmitForm, setShowCycleSubmitForm] = useState(false);
   const [cycleSubmitTitle, setCycleSubmitTitle] = useState("");
   const [cycleSubmitCategory, setCycleSubmitCategory] = useState<(typeof categories)[number]["name"]>(categories[0].name);
@@ -801,6 +807,57 @@ export default function WavefrontApp() {
     const { error } = await supabase.from("puzzle_community_posts").delete().eq("id", id);
     if (error) { console.error("delete community post failed", error); return; }
     setPosts((current) => current.filter((post) => post.id !== id));
+  };
+
+  const toggleThread = (postId: string) => {
+    const opening = openThreadId !== postId;
+    setOpenThreadId(opening ? postId : null);
+    if (opening && !threadComments[postId]) {
+      setThreadLoading((current) => ({ ...current, [postId]: true }));
+      void supabase
+        ?.from("puzzle_community_comments")
+        .select("id,post_id,user_id,author_name,body,created_at")
+        .eq("post_id", postId)
+        .order("created_at", { ascending: true })
+        .then(({ data, error }) => {
+          if (error) console.error("load comments failed", error);
+          setThreadComments((current) => ({ ...current, [postId]: (data ?? []) as CommunityComment[] }));
+          setThreadLoading((current) => ({ ...current, [postId]: false }));
+        });
+    }
+  };
+
+  const addComment = async (postId: string) => {
+    const body = (threadDrafts[postId] ?? "").trim();
+    if (!body) return;
+    if (!authUser || !supabase) {
+      setAuthMessage("Sign in to reply to a community puzzle.");
+      setShowAuth(true);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("puzzle_community_comments")
+      .insert({ post_id: postId, user_id: authUser.id, author_name: authUser.email?.split("@")[0] ?? "Solver", body })
+      .select("id,post_id,user_id,author_name,body,created_at")
+      .single();
+    if (error || !data) {
+      setThreadNotice((current) => ({ ...current, [postId]: "Your reply could not be posted. Please try again." }));
+      return;
+    }
+    const comment = data as CommunityComment;
+    setThreadComments((current) => ({ ...current, [postId]: [...(current[postId] ?? []), comment] }));
+    setPosts((current) => current.map((post) => (post.id === postId ? { ...post, replies: post.replies + 1 } : post)));
+    setThreadDrafts((current) => ({ ...current, [postId]: "" }));
+    setThreadNotice((current) => ({ ...current, [postId]: "" }));
+  };
+
+  const deleteComment = async (postId: string, commentId: string) => {
+    if (!supabase) return;
+    if (!window.confirm("Delete this reply permanently?")) return;
+    const { error } = await supabase.from("puzzle_community_comments").delete().eq("id", commentId);
+    if (error) { console.error("delete comment failed", error); return; }
+    setThreadComments((current) => ({ ...current, [postId]: (current[postId] ?? []).filter((comment) => comment.id !== commentId) }));
+    setPosts((current) => current.map((post) => (post.id === postId ? { ...post, replies: Math.max(0, post.replies - 1) } : post)));
   };
 
   const submitCyclePuzzle = async () => {
@@ -1484,12 +1541,18 @@ export default function WavefrontApp() {
           </section>
         ) : (
           <section className="standard-view">
-            <div className="page-heading split">
-              <div><span className="eyebrow">Solver forum</span><h1>Community</h1><p>Debate methods, rate challenges, and submit original puzzles.</p></div>
-              <div className="admin-toolbar">
-                <button className="text-action" onClick={() => setShowCycleSubmitForm(true)}>Propose for next cycle</button>
-                <button className="primary-action small" onClick={() => setShowPostForm(true)}>Submit a puzzle <span aria-hidden="true">＋</span></button>
-              </div>
+            <div className="page-heading"><span className="eyebrow">Solver forum</span><h1>Community</h1><p>Debate methods, rate challenges, and submit original puzzles.</p></div>
+            <div className="submit-choice-row">
+              <button className="submit-choice-card" onClick={() => setShowPostForm(true)}>
+                <span className="submit-choice-icon" aria-hidden="true">💬</span>
+                <span className="submit-choice-copy"><strong>Submit a puzzle</strong><small>Goes to the public forum below. Everyone can read it, rate it, and reply — attach a full question, or just start a discussion.</small></span>
+                <span className="submit-choice-arrow" aria-hidden="true">→</span>
+              </button>
+              <button className="submit-choice-card alt" onClick={() => setShowCycleSubmitForm(true)}>
+                <span className="submit-choice-icon" aria-hidden="true">🎯</span>
+                <span className="submit-choice-copy"><strong>Propose for next cycle</strong><small>Private, admin-only review. Never shown in the feed — if it's good, it could join a future 90-puzzle roster.</small></span>
+                <span className="submit-choice-arrow" aria-hidden="true">→</span>
+              </button>
             </div>
             <div className="forum-layout">
               <div className="forum-feed">
@@ -1503,6 +1566,42 @@ export default function WavefrontApp() {
                       <span>{post.author_name} · {relativeTime(post.created_at)}{post.status !== "published" && " · Awaiting review"}</span>
                       <h2>{post.title}</h2><small>{post.category}</small>
                       {post.question && <p className="forum-question">{post.question}</p>}
+                      <button className="forum-reply-toggle" onClick={() => toggleThread(post.id)}>
+                        <span aria-hidden="true">💬</span> {post.replies} {post.replies === 1 ? "reply" : "replies"}
+                        <span className={`thread-caret ${openThreadId === post.id ? "open" : ""}`} aria-hidden="true">⌄</span>
+                      </button>
+                      {openThreadId === post.id && (
+                        <div className="forum-thread">
+                          {threadLoading[post.id] ? (
+                            <p className="thread-empty">Loading replies...</p>
+                          ) : (threadComments[post.id]?.length ?? 0) === 0 ? (
+                            <p className="thread-empty">No replies yet. Start the discussion.</p>
+                          ) : (
+                            threadComments[post.id]!.map((comment) => (
+                              <div className="thread-comment" key={comment.id}>
+                                <span className="thread-avatar">{comment.author_name.slice(0, 2).toUpperCase()}</span>
+                                <div className="thread-comment-copy">
+                                  <span>{comment.author_name} · {relativeTime(comment.created_at)}</span>
+                                  <p>{comment.body}</p>
+                                </div>
+                                {(isAdmin || comment.user_id === authUser?.id) && (
+                                  <button className="forum-delete small" aria-label="Delete reply" onClick={() => void deleteComment(post.id, comment.id)}>🗑</button>
+                                )}
+                              </div>
+                            ))
+                          )}
+                          <div className="thread-composer">
+                            <input
+                              value={threadDrafts[post.id] ?? ""}
+                              onChange={(event) => setThreadDrafts((current) => ({ ...current, [post.id]: event.target.value }))}
+                              onKeyDown={(event) => { if (event.key === "Enter") void addComment(post.id); }}
+                              placeholder={authUser ? "Add a reply..." : "Sign in to reply"}
+                            />
+                            <button className="text-action" onClick={() => void addComment(post.id)} disabled={!(threadDrafts[post.id] ?? "").trim()}>Reply</button>
+                          </div>
+                          {threadNotice[post.id] && <small className="feedback-notice">{threadNotice[post.id]}</small>}
+                        </div>
+                      )}
                     </div>
                     <div className="forum-metrics"><strong>{post.rating ?? "—"}</strong><span>rating</span><strong>{post.replies}</strong><span>replies</span></div>
                     {isAdmin && <button className="forum-delete" aria-label="Delete post" onClick={() => void deleteCommunityPost(post.id)}>🗑</button>}
@@ -1553,16 +1652,29 @@ export default function WavefrontApp() {
 
       {showPostForm && (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setShowPostForm(false)}>
-          <section className="post-modal" role="dialog" aria-modal="true" aria-labelledby="post-title" onMouseDown={(event) => event.stopPropagation()}>
+          <section className="post-modal wide" role="dialog" aria-modal="true" aria-labelledby="post-title" onMouseDown={(event) => event.stopPropagation()}>
             <button className="modal-close" aria-label="Close" onClick={() => setShowPostForm(false)}>×</button>
+            <span className="visibility-badge public">🌐 Public · everyone in Community can see this</span>
             <span className="eyebrow">Community submission</span><h2 id="post-title">Start with a clear challenge.</h2>
-            <label>Puzzle title<input value={postTitle} onChange={(event) => setPostTitle(event.target.value)} placeholder="Give your puzzle a memorable name" /></label>
-            <label>Section<select value={postCategory} onChange={(event) => setPostCategory(event.target.value as (typeof categories)[number]["name"])}>{categories.map((category) => <option key={category.name}>{category.name}</option>)}</select></label>
-            <label>Question (optional -- attach a real puzzle, or leave blank to just start a discussion)<textarea value={postQuestion} onChange={(event) => setPostQuestion(event.target.value)} /></label>
-            {postQuestion.trim() && <>
-              <fieldset><legend>Answer options</legend>{postOptions.map((option, index) => <label className="option-edit" key={index}><input type="radio" name="post-correct-answer" checked={postCorrectOption === index} onChange={() => setPostCorrectOption(index)} /><input value={option} onChange={(event) => setPostOptions(postOptions.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder={`Option ${index + 1}`} /></label>)}</fieldset>
-              <label>Explanation (optional)<textarea value={postExplanation} onChange={(event) => setPostExplanation(event.target.value)} /></label>
-            </>}
+            <div className="form-section">
+              <span className="form-section-label">The basics</span>
+              <label>Puzzle title<input value={postTitle} onChange={(event) => setPostTitle(event.target.value)} placeholder="Give your puzzle a memorable name" /></label>
+              <label>Section<select value={postCategory} onChange={(event) => setPostCategory(event.target.value as (typeof categories)[number]["name"])}>{categories.map((category) => <option key={category.name}>{category.name}</option>)}</select></label>
+            </div>
+            <div className="form-section">
+              <span className="form-section-label">Attach a real puzzle (optional)</span>
+              <label>Question<textarea value={postQuestion} onChange={(event) => setPostQuestion(event.target.value)} placeholder="Leave this blank to just start a discussion instead" /></label>
+              {postQuestion.trim() && <>
+                <fieldset><legend>Answer options -- mark the correct one</legend>{postOptions.map((option, index) => (
+                  <label className="option-edit" key={index}>
+                    <span className="option-letter">{String.fromCharCode(65 + index)}</span>
+                    <input type="radio" name="post-correct-answer" checked={postCorrectOption === index} onChange={() => setPostCorrectOption(index)} aria-label={`Mark option ${String.fromCharCode(65 + index)} correct`} />
+                    <input value={option} onChange={(event) => setPostOptions(postOptions.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder={`Option ${String.fromCharCode(65 + index)}`} />
+                  </label>
+                ))}</fieldset>
+                <label>Explanation (optional)<textarea value={postExplanation} onChange={(event) => setPostExplanation(event.target.value)} placeholder="Why is this the right answer?" /></label>
+              </>}
+            </div>
             <button className="checkout-button" onClick={() => void addPost()} disabled={!postTitle.trim()}>Send for review <span aria-hidden="true">→</span></button>
             {postNotice && <small className="feedback-notice">{postNotice}</small>}
           </section>
@@ -1571,15 +1683,28 @@ export default function WavefrontApp() {
 
       {showCycleSubmitForm && (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setShowCycleSubmitForm(false)}>
-          <section className="post-modal" role="dialog" aria-modal="true" aria-labelledby="cycle-submit-title" onMouseDown={(event) => event.stopPropagation()}>
+          <section className="post-modal wide" role="dialog" aria-modal="true" aria-labelledby="cycle-submit-title" onMouseDown={(event) => event.stopPropagation()}>
             <button className="modal-close" aria-label="Close" onClick={() => setShowCycleSubmitForm(false)}>×</button>
+            <span className="visibility-badge private">🔒 Private · only the admin reviews this</span>
             <span className="eyebrow">Propose for the next cycle</span><h2 id="cycle-submit-title">Submit a complete puzzle.</h2>
             <p>This goes straight to the admin for review -- it is never shown in the public community feed.</p>
-            <label>Puzzle title<input value={cycleSubmitTitle} onChange={(event) => setCycleSubmitTitle(event.target.value)} placeholder="Give your puzzle a memorable name" /></label>
-            <label>Section<select value={cycleSubmitCategory} onChange={(event) => setCycleSubmitCategory(event.target.value as (typeof categories)[number]["name"])}>{categories.map((category) => <option key={category.name}>{category.name}</option>)}</select></label>
-            <label>Question<textarea value={cycleSubmitQuestion} onChange={(event) => setCycleSubmitQuestion(event.target.value)} /></label>
-            <fieldset><legend>Answer options</legend>{cycleSubmitOptions.map((option, index) => <label className="option-edit" key={index}><input type="radio" name="cycle-correct-answer" checked={cycleSubmitCorrectOption === index} onChange={() => setCycleSubmitCorrectOption(index)} /><input value={option} onChange={(event) => setCycleSubmitOptions(cycleSubmitOptions.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder={`Option ${index + 1}`} /></label>)}</fieldset>
-            <label>Explanation (optional)<textarea value={cycleSubmitExplanation} onChange={(event) => setCycleSubmitExplanation(event.target.value)} /></label>
+            <div className="form-section">
+              <span className="form-section-label">The basics</span>
+              <label>Puzzle title<input value={cycleSubmitTitle} onChange={(event) => setCycleSubmitTitle(event.target.value)} placeholder="Give your puzzle a memorable name" /></label>
+              <label>Section<select value={cycleSubmitCategory} onChange={(event) => setCycleSubmitCategory(event.target.value as (typeof categories)[number]["name"])}>{categories.map((category) => <option key={category.name}>{category.name}</option>)}</select></label>
+            </div>
+            <div className="form-section">
+              <span className="form-section-label">The full puzzle</span>
+              <label>Question<textarea value={cycleSubmitQuestion} onChange={(event) => setCycleSubmitQuestion(event.target.value)} placeholder="Write out the question exactly as a solver would see it" /></label>
+              <fieldset><legend>Answer options -- mark the correct one</legend>{cycleSubmitOptions.map((option, index) => (
+                <label className="option-edit" key={index}>
+                  <span className="option-letter">{String.fromCharCode(65 + index)}</span>
+                  <input type="radio" name="cycle-correct-answer" checked={cycleSubmitCorrectOption === index} onChange={() => setCycleSubmitCorrectOption(index)} aria-label={`Mark option ${String.fromCharCode(65 + index)} correct`} />
+                  <input value={option} onChange={(event) => setCycleSubmitOptions(cycleSubmitOptions.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder={`Option ${String.fromCharCode(65 + index)}`} />
+                </label>
+              ))}</fieldset>
+              <label>Explanation (optional)<textarea value={cycleSubmitExplanation} onChange={(event) => setCycleSubmitExplanation(event.target.value)} placeholder="Why is this the right answer?" /></label>
+            </div>
             <button className="checkout-button" onClick={() => void submitCyclePuzzle()} disabled={!cycleSubmitTitle.trim()}>Send to admin <span aria-hidden="true">→</span></button>
             {cycleSubmitNotice && <small className="feedback-notice">{cycleSubmitNotice}</small>}
           </section>
