@@ -43,6 +43,8 @@ const accessPasses: Record<AccessPass, { name: string; price: string; duration: 
   annual: { name: "Annual Pass", price: "₹599", duration: "365 days", description: "Best value for a full year" },
 };
 
+const FREE_TRIAL_SOLVES_PER_CATEGORY = 2;
+
 const categories = [
   { name: "Logic & Knowledge", code: "LK", color: "coral", mastery: 64 },
   { name: "Mathematical Reasoning", code: "MR", color: "blue", mastery: 48 },
@@ -149,6 +151,7 @@ export default function WavefrontApp() {
   const [solvePoints, setSolvePoints] = useState<Record<string, number>>({});
   const [progressSyncNotice, setProgressSyncNotice] = useState("");
   const [solvedLoadNotice, setSolvedLoadNotice] = useState("");
+  const [trialViewedIds, setTrialViewedIds] = useState<string[]>([]);
   const [attemptedIds, setAttemptedIds] = useState<string[]>([]);
   const [adaptiveCategory, setAdaptiveCategory] = useState<(typeof categories)[number]["name"]>("Logic & Knowledge");
   const [adaptiveLevels, setAdaptiveLevels] = useState<Record<string, number>>(Object.fromEntries(categories.map((category) => [category.name, 3])));
@@ -341,6 +344,19 @@ export default function WavefrontApp() {
         // stale response wipe out a puzzle solved moments earlier.
         const loaded = (data ?? []).map((row) => row.puzzle_id as string);
         setSolvedIds((current) => Array.from(new Set([...current, ...loaded])));
+      });
+  }, [authUser?.id]);
+
+  useEffect(() => {
+    if (!supabase || !authUser) {
+      setTrialViewedIds([]);
+      return;
+    }
+    void supabase.from("puzzle_trial_views").select("puzzle_id").eq("user_id", authUser.id)
+      .then(({ data, error }) => {
+        if (error) { console.error("puzzle_trial_views load failed", error); return; }
+        const loaded = (data ?? []).map((row) => row.puzzle_id as string);
+        setTrialViewedIds((current) => Array.from(new Set([...current, ...loaded])));
       });
   }, [authUser?.id]);
 
@@ -563,6 +579,20 @@ export default function WavefrontApp() {
     return choices.sort((a, b) => Math.abs(a.difficulty - target) - Math.abs(b.difficulty - target))[0] ?? livePuzzles[0];
   }, [livePuzzles, solvedIds, attemptedIds, adaptiveCategory, adaptiveLevels]);
 
+  const freeTrialUsedByCategory = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const puzzle of livePuzzles) {
+      if (solvedIds.includes(puzzle.id) || trialViewedIds.includes(puzzle.id)) {
+        counts[puzzle.category] = (counts[puzzle.category] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [livePuzzles, solvedIds, trialViewedIds]);
+
+  const canOpenWithoutPass = (puzzle: Puzzle) =>
+    solvedIds.includes(puzzle.id) || trialViewedIds.includes(puzzle.id) ||
+    (freeTrialUsedByCategory[puzzle.category] ?? 0) < FREE_TRIAL_SOLVES_PER_CATEGORY;
+
   const leaderboard = useMemo(() => {
     const real = realLeaders.map((player) => ({ name: player.display_name, score: Number(player.score), solved: Number(player.solved_count), streak: 0, isCurrent: player.user_id === authUser?.id }));
     return [...samplePlayers, ...real].sort((a, b) => b.score - a.score || b.solved - a.solved).map((player, index) => ({ ...player, rank: index + 1 }));
@@ -570,9 +600,19 @@ export default function WavefrontApp() {
   const leaders = leaderboard;
 
   const startPuzzle = (puzzle: Puzzle, label?: string) => {
-    if (!hasActivePass) {
+    if (!authUser) {
+      setAuthMessage(`Sign in to try ${FREE_TRIAL_SOLVES_PER_CATEGORY} free questions in every path.`);
+      setShowAuth(true);
+      return;
+    }
+    if (!hasActivePass && !canOpenWithoutPass(puzzle)) {
       setShowSubscribe(true);
       return;
+    }
+    if (!hasActivePass && !solvedIds.includes(puzzle.id) && !trialViewedIds.includes(puzzle.id) && supabase) {
+      setTrialViewedIds((current) => [...current, puzzle.id]);
+      void supabase.from("puzzle_trial_views").upsert({ user_id: authUser.id, puzzle_id: puzzle.id }, { onConflict: "user_id,puzzle_id" })
+        .then(({ error }) => { if (error) console.error("puzzle_trial_views upsert failed", error); });
     }
     const alreadySolved = solvedIds.includes(puzzle.id);
     setActivePuzzle(puzzle);
@@ -1092,7 +1132,7 @@ export default function WavefrontApp() {
           </section>
         ) : view === "paths" ? (
           <section className="standard-view">
-            <div className="page-heading"><span className="eyebrow">Choose your own starting point</span><h1>Explore the paths</h1><p>Pick any challenge from any section. Each solved block guides your next recommended challenge, but you are always free to explore.</p></div>
+            <div className="page-heading"><span className="eyebrow">Choose your own starting point</span><h1>Explore the paths</h1><p>{hasActivePass ? "Pick any challenge from any section. Each solved block guides your next recommended challenge, but you are always free to explore." : `Try ${FREE_TRIAL_SOLVES_PER_CATEGORY} questions free in every path, picked for you the same way a subscriber's next challenge is. Solve those and subscribe to keep going.`}</p></div>
             {solvedLoadNotice && <p className="tips-error">{solvedLoadNotice}</p>}
             <div className="path-list">
               {categories.map((category, categoryIndex) => {
@@ -1105,12 +1145,16 @@ export default function WavefrontApp() {
                       <div className="path-progress"><span style={{ width: `${mastery[category.name]}%` }} /></div><small>{mastery[category.name]}% mastery</small>
                     </div>
                     <div className="path-puzzles">
-                      {categoryPuzzles.map((puzzle, index) => (
-                        <button type="button" key={puzzle.id} onClick={() => startPuzzle(puzzle)}>
-                          <span className={solvedIds.includes(puzzle.id) ? "puzzle-dot solved" : "puzzle-dot"}>{solvedIds.includes(puzzle.id) ? "✓" : index + 1}</span>
-                          <span><strong>{puzzle.title}</strong><small>{difficultyLabel(puzzle.difficulty)} · {puzzle.time} min</small></span><span aria-hidden="true">→</span>
-                        </button>
-                      ))}
+                      {categoryPuzzles.map((puzzle, index) => {
+                        const solved = solvedIds.includes(puzzle.id);
+                        const locked = !hasActivePass && !canOpenWithoutPass(puzzle);
+                        return (
+                          <button type="button" className={locked ? "locked" : ""} key={puzzle.id} onClick={() => startPuzzle(puzzle)}>
+                            <span className={solved ? "puzzle-dot solved" : locked ? "puzzle-dot locked" : "puzzle-dot"}>{solved ? "✓" : locked ? "🔒" : index + 1}</span>
+                            <span><strong>{puzzle.title}</strong><small>{locked ? "Subscribe to unlock" : `${difficultyLabel(puzzle.difficulty)} · ${puzzle.time} min`}</small></span><span aria-hidden="true">→</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </section>
                 );

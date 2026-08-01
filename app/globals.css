@@ -908,6 +908,22 @@ select:focus-visible {
   color: var(--green);
 }
 
+.puzzle-dot.locked {
+  border-color: var(--line);
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.path-puzzles button.locked strong {
+  color: var(--muted);
+}
+
+.path-puzzles button.locked small {
+  color: var(--blue);
+  font-weight: 700;
+}
+
 .rank-callout {
   display: grid;
   min-width: 170px;
