@@ -33,7 +33,16 @@ type AdminTip = LearningTip & { publication_status: "draft" | "published" | "arc
 type AdminPuzzleForm = { title: string; category: string; difficulty: number; time: number; question: string; options: string[]; correctOption: number; hints: string[]; explanation: string; takeaway: string; publication_status: "draft" | "published" };
 type AdminTipForm = { category: string; title: string; body: string; sort_order: number; publication_status: "draft" | "published" | "archived" };
 type FeedbackKind = "general" | "unclear" | "incorrect" | "difficulty" | "suggestion";
-type CommunityPost = { id: string; user_id: string; author_name: string; title: string; category: string; replies: number; rating: number | null; status: "pending_review" | "published" | "rejected"; created_at: string };
+type CommunityPost = {
+  id: string; user_id: string; author_name: string; title: string; category: string; replies: number; rating: number | null;
+  status: "pending_review" | "published" | "rejected"; created_at: string;
+  question: string | null; options: string[] | null; correct_option: number | null; explanation: string | null;
+};
+
+type CycleSubmission = {
+  id: string; user_id: string; author_name: string; title: string; category: string; question: string;
+  options: string[]; correct_option: number; explanation: string | null; status: "submitted" | "approved" | "rejected"; created_at: string;
+};
 type CycleRewardResult = { user_id: string; rank: number; score: number; was_subscribed: boolean; weekly_days_granted: number; streak_after: number; streak_milestone_days_granted: number };
 type RealLeader = { user_id: string; display_name: string; score: number; solved_count: number };
 type AdminFeedback = { id: string; user_id: string; puzzle_id: string; issue_type: string; rating: number | null; note: string; created_at: string };
@@ -173,7 +182,20 @@ export default function WavefrontApp() {
   const [showPostForm, setShowPostForm] = useState(false);
   const [postTitle, setPostTitle] = useState("");
   const [postCategory, setPostCategory] = useState<(typeof categories)[number]["name"]>(categories[0].name);
+  const [postQuestion, setPostQuestion] = useState("");
+  const [postOptions, setPostOptions] = useState(["", "", "", ""]);
+  const [postCorrectOption, setPostCorrectOption] = useState<number | null>(null);
+  const [postExplanation, setPostExplanation] = useState("");
   const [postNotice, setPostNotice] = useState("");
+  const [showCycleSubmitForm, setShowCycleSubmitForm] = useState(false);
+  const [cycleSubmitTitle, setCycleSubmitTitle] = useState("");
+  const [cycleSubmitCategory, setCycleSubmitCategory] = useState<(typeof categories)[number]["name"]>(categories[0].name);
+  const [cycleSubmitQuestion, setCycleSubmitQuestion] = useState("");
+  const [cycleSubmitOptions, setCycleSubmitOptions] = useState(["", "", "", ""]);
+  const [cycleSubmitCorrectOption, setCycleSubmitCorrectOption] = useState<number | null>(null);
+  const [cycleSubmitExplanation, setCycleSubmitExplanation] = useState("");
+  const [cycleSubmitNotice, setCycleSubmitNotice] = useState("");
+  const [adminCycleSubmissions, setAdminCycleSubmissions] = useState<CycleSubmission[]>([]);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
@@ -264,7 +286,7 @@ export default function WavefrontApp() {
       try {
         const { data } = await supabase
           .from("puzzle_community_posts")
-          .select("id,user_id,author_name,title,category,replies,rating,status,created_at")
+          .select("id,user_id,author_name,title,category,replies,rating,status,created_at,question,options,correct_option,explanation")
           .order("created_at", { ascending: false })
           .limit(50);
         setPosts((data ?? []) as CommunityPost[]);
@@ -439,12 +461,13 @@ export default function WavefrontApp() {
   const loadAdminData = async () => {
     if (!supabase || !isAdmin) return;
     setAdminLoading(true);
-    const [catalogResult, profilesResult, subscriptionsResult, tipsResult, feedbackResult] = await Promise.all([
+    const [catalogResult, profilesResult, subscriptionsResult, tipsResult, feedbackResult, cycleSubmissionsResult] = await Promise.all([
       supabase.from("puzzle_catalog").select("id,title,path,difficulty,expected_minutes,access_level,publication_status,payload,updated_at").order("updated_at", { ascending: false }),
       supabase.from("puzzle_profiles").select("user_id,display_name,created_at").order("created_at", { ascending: false }),
       supabase.from("puzzle_subscriptions").select("user_id,status,current_period_end"),
       supabase.from("puzzle_learning_tips").select("id,category,title,body,sort_order,publication_status").order("category").order("sort_order"),
       supabase.from("puzzle_feedback").select("id,user_id,puzzle_id,issue_type,rating,note,created_at").order("created_at", { ascending: false }).limit(100),
+      supabase.from("puzzle_cycle_submissions").select("id,user_id,author_name,title,category,question,options,correct_option,explanation,status,created_at").order("created_at", { ascending: false }),
     ]);
     if (catalogResult.data) {
       const persisted = new Map((catalogResult.data as AdminPuzzle[]).map((puzzle) => [puzzle.id, puzzle]));
@@ -456,10 +479,34 @@ export default function WavefrontApp() {
     }
     if (tipsResult.data) setAdminTips(tipsResult.data as AdminTip[]);
     if (feedbackResult.data) setAdminFeedback(feedbackResult.data as AdminFeedback[]);
+    if (cycleSubmissionsResult.data) setAdminCycleSubmissions(cycleSubmissionsResult.data as CycleSubmission[]);
     setAdminLoading(false);
   };
 
   useEffect(() => { void loadAdminData(); }, [authUser?.id]);
+
+  const deleteFeedback = async (id: string) => {
+    if (!supabase) return;
+    if (!window.confirm("Delete this feedback message permanently?")) return;
+    const { error } = await supabase.from("puzzle_feedback").delete().eq("id", id);
+    if (error) { console.error("delete feedback failed", error); return; }
+    setAdminFeedback((current) => current.filter((item) => item.id !== id));
+  };
+
+  const deleteCycleSubmission = async (id: string) => {
+    if (!supabase) return;
+    if (!window.confirm("Delete this cycle proposal permanently?")) return;
+    const { error } = await supabase.from("puzzle_cycle_submissions").delete().eq("id", id);
+    if (error) { console.error("delete cycle submission failed", error); return; }
+    setAdminCycleSubmissions((current) => current.filter((item) => item.id !== id));
+  };
+
+  const setCycleSubmissionStatus = async (id: string, status: "approved" | "rejected") => {
+    if (!supabase) return;
+    const { error } = await supabase.from("puzzle_cycle_submissions").update({ status }).eq("id", id);
+    if (error) { console.error("update cycle submission status failed", error); return; }
+    setAdminCycleSubmissions((current) => current.map((item) => (item.id === id ? { ...item, status } : item)));
+  };
 
   const selectAdminPuzzle = (puzzle: AdminPuzzle) => {
     const payload = completePuzzlePayload(puzzle.id, puzzle.payload as Partial<Puzzle>);
@@ -659,29 +706,25 @@ export default function WavefrontApp() {
     setSolvePoints((current) => ({ ...current, [activePuzzle.id]: points }));
     setMastery((current) => ({ ...current, [activePuzzle.category]: Math.min(100, (current[activePuzzle.category] ?? 0) + points) }));
     if (supabase && authUser) {
-      const asResult = (promise: PromiseLike<{ error: { message?: string; code?: string } | null }>) =>
-        Promise.resolve(promise).catch((thrown): { error: { message?: string; code?: string } } => ({
+      // puzzle_progress is intentionally not written here anymore: nothing
+      // in the app reads it (locking/scoring/streaks all read
+      // puzzle_solve_scores, which has proven reliable), so it was pure
+      // unused write volume.
+      void Promise.resolve(
+        supabase.from("puzzle_solve_scores").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, points, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" }),
+      )
+        .catch((thrown): { error: { message?: string; code?: string } } => ({
           error: { message: thrown instanceof Error ? thrown.message : String(thrown) },
-        }));
-      void Promise.all([
-        asResult(supabase.from("puzzle_progress").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, attempts: 1, hints_used: revealedHints, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" })),
-        asResult(supabase.from("puzzle_solve_scores").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, points, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" })),
-      ]).then(([progressResult, scoreResult]) => {
-        // puzzle_solve_scores is the table locking/scoring/streaks now read
-        // from (it has proven reliable; puzzle_progress has not), so only
-        // ITS failure should roll back the optimistic local "solved" state.
-        // puzzle_progress is best-effort bookkeeping only at this point.
-        if (progressResult.error) {
-          console.error("puzzle_progress upsert failed", progressResult.error);
-        }
-        if (scoreResult.error) {
-          console.error("puzzle_solve_scores upsert failed", scoreResult.error);
-          setSolvedIds((current) => current.filter((id) => id !== activePuzzle.id));
-          setProgressSyncNotice(`Your solve could not be saved (${scoreResult.error.message || scoreResult.error.code || "unknown error"}). Please try again.`);
-        }
-        setStreakVersion((version) => version + 1);
-        setLeaderboardVersion((version) => version + 1);
-      });
+        }))
+        .then((scoreResult) => {
+          if (scoreResult.error) {
+            console.error("puzzle_solve_scores upsert failed", scoreResult.error);
+            setSolvedIds((current) => current.filter((id) => id !== activePuzzle.id));
+            setProgressSyncNotice(`Your solve could not be saved (${scoreResult.error.message || scoreResult.error.code || "unknown error"}). Please try again.`);
+          }
+          setStreakVersion((version) => version + 1);
+          setLeaderboardVersion((version) => version + 1);
+        });
     }
   };
 
@@ -711,6 +754,12 @@ export default function WavefrontApp() {
       setShowAuth(true);
       return;
     }
+    const cleanOptions = postOptions.map((option) => option.trim());
+    const hasFullPuzzle = postQuestion.trim() && cleanOptions.every((option) => option) && postCorrectOption !== null;
+    if (postQuestion.trim() && !hasFullPuzzle) {
+      setPostNotice("Fill in the question, all four options, and mark the correct one -- or clear them to post without a puzzle attached.");
+      return;
+    }
     const { data, error } = await supabase
       .from("puzzle_community_posts")
       .insert({
@@ -719,8 +768,12 @@ export default function WavefrontApp() {
         title: cleanTitle,
         category: postCategory,
         status: "pending_review",
+        question: hasFullPuzzle ? postQuestion.trim() : null,
+        options: hasFullPuzzle ? cleanOptions : null,
+        correct_option: hasFullPuzzle ? postCorrectOption : null,
+        explanation: hasFullPuzzle && postExplanation.trim() ? postExplanation.trim() : null,
       })
-      .select("id,user_id,author_name,title,category,replies,rating,status,created_at")
+      .select("id,user_id,author_name,title,category,replies,rating,status,created_at,question,options,correct_option,explanation")
       .single();
     if (error || !data) {
       setPostNotice("Your puzzle could not be submitted. Please try again.");
@@ -728,8 +781,55 @@ export default function WavefrontApp() {
     }
     setPosts((current) => [data as CommunityPost, ...current]);
     setPostTitle("");
+    setPostQuestion("");
+    setPostOptions(["", "", "", ""]);
+    setPostCorrectOption(null);
+    setPostExplanation("");
     setPostNotice("");
     setShowPostForm(false);
+  };
+
+  const deleteCommunityPost = async (id: string) => {
+    if (!supabase) return;
+    if (!window.confirm("Delete this community post permanently?")) return;
+    const { error } = await supabase.from("puzzle_community_posts").delete().eq("id", id);
+    if (error) { console.error("delete community post failed", error); return; }
+    setPosts((current) => current.filter((post) => post.id !== id));
+  };
+
+  const submitCyclePuzzle = async () => {
+    const cleanTitle = cycleSubmitTitle.trim();
+    const cleanOptions = cycleSubmitOptions.map((option) => option.trim());
+    if (!authUser || !supabase) {
+      setShowCycleSubmitForm(false);
+      setAuthMessage("Sign in to propose a puzzle for the next cycle.");
+      setShowAuth(true);
+      return;
+    }
+    if (!cleanTitle || !cycleSubmitQuestion.trim() || !cleanOptions.every((option) => option) || cycleSubmitCorrectOption === null) {
+      setCycleSubmitNotice("A cycle proposal needs a title, the question, all four options, and the correct one marked.");
+      return;
+    }
+    const { error } = await supabase.from("puzzle_cycle_submissions").insert({
+      user_id: authUser.id,
+      author_name: authUser.email?.split("@")[0] ?? "Solver",
+      title: cleanTitle,
+      category: cycleSubmitCategory,
+      question: cycleSubmitQuestion.trim(),
+      options: cleanOptions,
+      correct_option: cycleSubmitCorrectOption,
+      explanation: cycleSubmitExplanation.trim() || null,
+    });
+    if (error) {
+      setCycleSubmitNotice("Your proposal could not be submitted. Please try again.");
+      return;
+    }
+    setCycleSubmitTitle("");
+    setCycleSubmitQuestion("");
+    setCycleSubmitOptions(["", "", "", ""]);
+    setCycleSubmitCorrectOption(null);
+    setCycleSubmitExplanation("");
+    setCycleSubmitNotice("Sent to the admin for consideration in a future cycle. Thank you!");
   };
 
   const sendSignInCode = async () => {
@@ -1295,7 +1395,28 @@ export default function WavefrontApp() {
             </section>
             <section className="admin-panel member-panel">
               <div className="admin-panel-heading"><div><span className="eyebrow">Feedback inbox</span><h2>What solvers are telling you</h2></div><span>{adminFeedback.length} recent messages</span></div>
-              <div className="admin-list">{adminFeedback.length ? adminFeedback.map((item) => <article className="admin-feedback" key={item.id}><strong>{item.issue_type} {item.rating ? `· ${item.rating}/5` : ""}</strong><p>{item.note}</p><small>{item.puzzle_id === "site-feedback" ? "Site feedback" : item.puzzle_id} · {new Date(item.created_at).toLocaleDateString("en-IN")}</small></article>) : <p className="admin-empty">No feedback has arrived yet.</p>}</div>
+              <div className="admin-list">{adminFeedback.length ? adminFeedback.map((item) => <article className="admin-feedback" key={item.id}><strong>{item.issue_type} {item.rating ? `· ${item.rating}/5` : ""}</strong><p>{item.note}</p><small>{item.puzzle_id === "site-feedback" ? "Site feedback" : item.puzzle_id} · {new Date(item.created_at).toLocaleDateString("en-IN")}</small><button className="forum-delete" aria-label="Delete feedback" onClick={() => void deleteFeedback(item.id)}>🗑</button></article>) : <p className="admin-empty">No feedback has arrived yet.</p>}</div>
+            </section>
+            <section className="admin-panel member-panel">
+              <div className="admin-panel-heading"><div><span className="eyebrow">Cycle proposals</span><h2>Puzzles submitted for a future roster</h2></div><span>{adminCycleSubmissions.length} proposals · admin-only</span></div>
+              <div className="admin-list">
+                {adminCycleSubmissions.length ? adminCycleSubmissions.map((item) => (
+                  <article className="admin-feedback" key={item.id}>
+                    <strong>{item.title} <small>· {item.category} · {item.status}</small></strong>
+                    <p>{item.question}</p>
+                    <ul className="cycle-proposal-options">
+                      {item.options.map((option, index) => <li key={index} className={index === item.correct_option ? "correct" : ""}>{option}</li>)}
+                    </ul>
+                    {item.explanation && <p>{item.explanation}</p>}
+                    <small>{item.author_name} · {new Date(item.created_at).toLocaleDateString("en-IN")}</small>
+                    <div className="admin-toolbar">
+                      <button className="text-action" onClick={() => void setCycleSubmissionStatus(item.id, "approved")} disabled={item.status === "approved"}>Mark approved</button>
+                      <button className="text-action" onClick={() => void setCycleSubmissionStatus(item.id, "rejected")} disabled={item.status === "rejected"}>Mark rejected</button>
+                      <button className="forum-delete" aria-label="Delete proposal" onClick={() => void deleteCycleSubmission(item.id)}>🗑</button>
+                    </div>
+                  </article>
+                )) : <p className="admin-empty">No puzzles have been proposed for a future cycle yet.</p>}
+              </div>
             </section>
             <section className="admin-panel member-panel">
               <div className="admin-panel-heading"><div><span className="eyebrow">Cycle rewards</span><h2>Leaderboard reset &amp; top-10 grants</h2></div><span>Cycle {currentCycle.cycleNumber}</span></div>
@@ -1351,11 +1472,23 @@ export default function WavefrontApp() {
               </div>
             )}
           </section>
+        ) : !hasActivePass ? (
+          <section className="standard-view">
+            <div className="page-heading"><span className="eyebrow">Solver forum</span><h1>Community</h1><p>Debate methods, rate challenges, and submit original puzzles.</p></div>
+            <div className="tips-locked">
+              <h2>Community is for subscribers.</h2>
+              <p>Get a pass to read discussions, submit puzzles, and propose puzzles for the next cycle.</p>
+              <button className="checkout-button" onClick={() => setShowSubscribe(true)}>Get full access <span aria-hidden="true">→</span></button>
+            </div>
+          </section>
         ) : (
           <section className="standard-view">
             <div className="page-heading split">
               <div><span className="eyebrow">Solver forum</span><h1>Community</h1><p>Debate methods, rate challenges, and submit original puzzles.</p></div>
-              <button className="primary-action small" onClick={() => setShowPostForm(true)}>Submit a puzzle <span aria-hidden="true">＋</span></button>
+              <div className="admin-toolbar">
+                <button className="text-action" onClick={() => setShowCycleSubmitForm(true)}>Propose for next cycle</button>
+                <button className="primary-action small" onClick={() => setShowPostForm(true)}>Submit a puzzle <span aria-hidden="true">＋</span></button>
+              </div>
             </div>
             <div className="forum-layout">
               <div className="forum-feed">
@@ -1368,8 +1501,10 @@ export default function WavefrontApp() {
                     <div className="forum-copy">
                       <span>{post.author_name} · {relativeTime(post.created_at)}{post.status !== "published" && " · Awaiting review"}</span>
                       <h2>{post.title}</h2><small>{post.category}</small>
+                      {post.question && <p className="forum-question">{post.question}</p>}
                     </div>
                     <div className="forum-metrics"><strong>{post.rating ?? "—"}</strong><span>rating</span><strong>{post.replies}</strong><span>replies</span></div>
+                    {isAdmin && <button className="forum-delete" aria-label="Delete post" onClick={() => void deleteCommunityPost(post.id)}>🗑</button>}
                   </article>
                 ))}
               </div>
@@ -1422,8 +1557,30 @@ export default function WavefrontApp() {
             <span className="eyebrow">Community submission</span><h2 id="post-title">Start with a clear challenge.</h2>
             <label>Puzzle title<input value={postTitle} onChange={(event) => setPostTitle(event.target.value)} placeholder="Give your puzzle a memorable name" /></label>
             <label>Section<select value={postCategory} onChange={(event) => setPostCategory(event.target.value as (typeof categories)[number]["name"])}>{categories.map((category) => <option key={category.name}>{category.name}</option>)}</select></label>
+            <label>Question (optional -- attach a real puzzle, or leave blank to just start a discussion)<textarea value={postQuestion} onChange={(event) => setPostQuestion(event.target.value)} /></label>
+            {postQuestion.trim() && <>
+              <fieldset><legend>Answer options</legend>{postOptions.map((option, index) => <label className="option-edit" key={index}><input type="radio" name="post-correct-answer" checked={postCorrectOption === index} onChange={() => setPostCorrectOption(index)} /><input value={option} onChange={(event) => setPostOptions(postOptions.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder={`Option ${index + 1}`} /></label>)}</fieldset>
+              <label>Explanation (optional)<textarea value={postExplanation} onChange={(event) => setPostExplanation(event.target.value)} /></label>
+            </>}
             <button className="checkout-button" onClick={() => void addPost()} disabled={!postTitle.trim()}>Send for review <span aria-hidden="true">→</span></button>
             {postNotice && <small className="feedback-notice">{postNotice}</small>}
+          </section>
+        </div>
+      )}
+
+      {showCycleSubmitForm && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setShowCycleSubmitForm(false)}>
+          <section className="post-modal" role="dialog" aria-modal="true" aria-labelledby="cycle-submit-title" onMouseDown={(event) => event.stopPropagation()}>
+            <button className="modal-close" aria-label="Close" onClick={() => setShowCycleSubmitForm(false)}>×</button>
+            <span className="eyebrow">Propose for the next cycle</span><h2 id="cycle-submit-title">Submit a complete puzzle.</h2>
+            <p>This goes straight to the admin for review -- it is never shown in the public community feed.</p>
+            <label>Puzzle title<input value={cycleSubmitTitle} onChange={(event) => setCycleSubmitTitle(event.target.value)} placeholder="Give your puzzle a memorable name" /></label>
+            <label>Section<select value={cycleSubmitCategory} onChange={(event) => setCycleSubmitCategory(event.target.value as (typeof categories)[number]["name"])}>{categories.map((category) => <option key={category.name}>{category.name}</option>)}</select></label>
+            <label>Question<textarea value={cycleSubmitQuestion} onChange={(event) => setCycleSubmitQuestion(event.target.value)} /></label>
+            <fieldset><legend>Answer options</legend>{cycleSubmitOptions.map((option, index) => <label className="option-edit" key={index}><input type="radio" name="cycle-correct-answer" checked={cycleSubmitCorrectOption === index} onChange={() => setCycleSubmitCorrectOption(index)} /><input value={option} onChange={(event) => setCycleSubmitOptions(cycleSubmitOptions.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder={`Option ${index + 1}`} /></label>)}</fieldset>
+            <label>Explanation (optional)<textarea value={cycleSubmitExplanation} onChange={(event) => setCycleSubmitExplanation(event.target.value)} /></label>
+            <button className="checkout-button" onClick={() => void submitCyclePuzzle()} disabled={!cycleSubmitTitle.trim()}>Send to admin <span aria-hidden="true">→</span></button>
+            {cycleSubmitNotice && <small className="feedback-notice">{cycleSubmitNotice}</small>}
           </section>
         </div>
       )}
