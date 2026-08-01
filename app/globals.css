@@ -2326,6 +2326,45 @@ select:focus-visible {
   margin-top: 12px;
 }
 
+.form-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #f3c6b0;
+  border-radius: 6px;
+  background: var(--coral-soft);
+  color: #8a3a24;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.form-alert::before {
+  content: "!";
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--coral);
+  color: white;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.form-alert.success {
+  border-color: #a9dcc5;
+  background: var(--green-soft);
+  color: #0b674e;
+}
+
+.form-alert.success::before {
+  content: "✓";
+  background: var(--green);
+}
+
 .mobile-nav {
   display: none;
 }
