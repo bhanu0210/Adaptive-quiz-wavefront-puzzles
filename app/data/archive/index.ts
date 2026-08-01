@@ -1,6 +1,13 @@
 // Archived puzzle rosters from previous rotation cycles. See docs/PUZZLE-ROTATION.md.
-// Each past cycle's full 90-puzzle roster is appended here (never deleted, never mutated)
-// as the current roster gets replaced. IDs across every cycle must stay globally unique.
+//
+// Retention: only the 2 most recently retired cycles are kept here. When a
+// 3rd would be added, remove the oldest cycle's entry from this array AND
+// delete its puzzle file under app/data/archive/ -- see the "Archive the
+// outgoing roster" step in docs/PUZZLE-ROTATION.md for the exact procedure,
+// including cleaning up that cycle's now-unreachable solve history in
+// Supabase. IDs across every cycle (including already-purged ones) must
+// stay globally unique forever -- never reuse an id even after its cycle
+// is removed from here.
 
 export type ArchivedPuzzle = {
   id: string;

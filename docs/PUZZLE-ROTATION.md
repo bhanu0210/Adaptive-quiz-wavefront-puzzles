@@ -4,7 +4,7 @@ This is the operating manual for the recurring "new puzzle roster" cycle. It's w
 
 ## What this is
 
-Every 14 days, a fresh 90-puzzle roster (15 per category across the 6 paths: Logic & Knowledge, Mathematical Reasoning, Probability & Strategy, Algorithms & Optimization, Spatial Reasoning, Patterns & Numbers) gets **generated and opened as a pull request.** When the outgoing roster is eventually replaced, it moves to the Archive nav section — fully browsable and solvable, it just stops being the "current" spotlight set.
+Every 14 days, a fresh 90-puzzle roster (15 per category across the 6 paths: Logic & Knowledge, Mathematical Reasoning, Probability & Strategy, Algorithms & Optimization, Spatial Reasoning, Patterns & Numbers) gets **generated and opened as a pull request.** When the outgoing roster is eventually replaced, it moves to the Archive nav section — browsable and solvable, it just stops being the "current" spotlight set. **The archive keeps only the 2 most recently retired cycles** — when a 3rd would be added, the oldest archived cycle is permanently removed (see Step 5).
 
 **Generation and publishing are two separate, decoupled decisions:**
 - **Generation is automatic and clock-driven.** A new draft roster gets authored and opened as a PR every 14 days, no matter what happened to the previous draft.
@@ -50,9 +50,10 @@ Alongside the new puzzles, add a handful of new worked-example tip cards (in the
 
 1. Move the *entire current* puzzle content into a new file under `app/data/archive/` (follow the existing naming/versioning convention already in that directory — check `app/data/archive/index.ts` for the pattern), tagged with the outgoing cycle's number and date range.
 2. Register that archived cycle in `app/data/archive/index.ts`.
-3. Replace the current puzzle data files with the new 90.
-4. Update `app/data/cycle-meta.ts`: increment `cycleNumber`, set `startedAt` to today's date.
-5. Update `docs/puzzle-sources/USED-LOG.md`: log the new cycle's puzzle-family usage, and update the "available, not yet used" list.
+3. **If this brings the archive to more than 2 cycles**, remove the oldest one: delete its entry from `app/data/archive/index.ts` and delete its puzzle file. Its puzzle IDs are now permanently unreachable anywhere in the app — note them in the PR description so the admin can run a cleanup query removing any `puzzle_solve_scores`/`puzzle_progress` rows referencing those specific IDs in Supabase (a one-line `delete ... where puzzle_id = any(array[...])` against each table; don't run it yourself, this repo has no Supabase credentials — just hand the admin the exact ID list and query). Still never reuse a purged ID for a new puzzle.
+4. Replace the current puzzle data files with the new 90.
+5. Update `app/data/cycle-meta.ts`: increment `cycleNumber`, set `startedAt` to today's date.
+6. Update `docs/puzzle-sources/USED-LOG.md`: log the new cycle's puzzle-family usage, and update the "available, not yet used" list.
 
 ## Step 6 — Verify before shipping
 
