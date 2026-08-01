@@ -10,10 +10,6 @@ type DailySourcePuzzle = {
   explanation?: string;
 };
 
-function normalize(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
 export async function GET() {
   try {
     const source = await fetch("https://wavefrontdaily.in/api/news", {
@@ -32,9 +28,7 @@ export async function GET() {
       label: puzzle.label ?? "Daily",
       question: puzzle.question ?? "",
       explanation: puzzle.explanation ?? "",
-      verified: Boolean(
-        puzzle.answer && puzzle.explanation && normalize(puzzle.explanation).includes(normalize(puzzle.answer)),
-      ),
+      verified: Boolean(puzzle.answer?.trim() && puzzle.explanation?.trim()),
     })).filter((puzzle) => puzzle.question);
 
     return NextResponse.json(
