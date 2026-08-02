@@ -981,6 +981,13 @@ select:focus-visible {
   font-size: 12px;
 }
 
+.puzzle-dot.missed {
+  border-color: var(--yellow);
+  background: var(--yellow-soft);
+  color: #8a6400;
+  font-size: 13px;
+}
+
 .path-puzzles button.locked strong {
   color: var(--muted);
 }
@@ -1720,6 +1727,18 @@ select:focus-visible {
   color: #38413f;
   font-size: 13px;
   line-height: 1.65;
+}
+
+.result-panel > p.redemption-notice {
+  display: inline-block;
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border-radius: 5px;
+  background: var(--yellow-soft);
+  color: #6b4e00;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
 }
 
 .takeaway {
