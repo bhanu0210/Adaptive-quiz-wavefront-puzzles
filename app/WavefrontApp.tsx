@@ -1260,7 +1260,7 @@ export default function WavefrontApp() {
               <div className="stat-strip" aria-label="Your performance">
                 <div title="Correct solves divided by attempts, this session"><strong>{attemptedIds.length ? `${Math.round((solvedIds.length / attemptedIds.length) * 100)}%` : "-"}</strong><span>Accuracy</span></div>
                 <div><strong>{solvedIds.length}</strong><span>Solved</span></div>
-                <div><strong>{authUser ? `#${leaderboard.find((player) => "isCurrent" in player)?.rank ?? "-"}` : "-"}</strong><span>Rank</span></div>
+                <div><strong>{authUser ? `#${leaderboard.find((player) => "isCurrent" in player && player.isCurrent)?.rank ?? "-"}` : "-"}</strong><span>Rank</span></div>
               </div>
             </div>
             <div className="adaptive-feature">
@@ -1356,7 +1356,7 @@ export default function WavefrontApp() {
           <section className="standard-view">
             <div className="page-heading split">
               <div><span className="eyebrow">Cycle {currentCycle.cycleNumber}</span><h1>Leaderboard</h1><p>Verified solves, accuracy, and hint efficiency.</p></div>
-              <div className="rank-callout"><span>{authUser ? "Your position in this board" : "Current board"}</span><strong>{authUser ? `#${leaderboard.find((player) => "isCurrent" in player)?.rank ?? "-"}` : samplePlayers.length}</strong><small>{authUser ? `among ${leaderboard.length} listed solvers` : "20 seeded solvers"}</small></div>
+              <div className="rank-callout"><span>{authUser ? "Your position in this board" : "Current board"}</span><strong>{authUser ? `#${leaderboard.find((player) => "isCurrent" in player && player.isCurrent)?.rank ?? "-"}` : samplePlayers.length}</strong><small>{authUser ? `among ${leaderboard.length} listed solvers` : "20 seeded solvers"}</small></div>
             </div>
             <div className="podium">
               {[leaders[1], leaders[0], leaders[2]].map((leader, index) => (
