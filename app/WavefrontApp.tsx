@@ -181,6 +181,7 @@ export default function WavefrontApp() {
   const [solvedLoadNotice, setSolvedLoadNotice] = useState("");
   const [trialViewedIds, setTrialViewedIds] = useState<string[]>([]);
   const [attemptedIds, setAttemptedIds] = useState<string[]>([]);
+  const [wrongOnceIds, setWrongOnceIds] = useState<string[]>([]);
   const [adaptiveLevels, setAdaptiveLevels] = useState<Record<string, number>>(Object.fromEntries(categories.map((category) => [category.name, 1])));
   const [difficultyRatings, setDifficultyRatings] = useState<Record<string, { avg: number; count: number }>>({});
   const [mastery, setMastery] = useState<Record<string, number>>(
@@ -400,6 +401,19 @@ export default function WavefrontApp() {
         if (error) { console.error("puzzle_trial_views load failed", error); return; }
         const loaded = (data ?? []).map((row) => row.puzzle_id as string);
         setTrialViewedIds((current) => Array.from(new Set([...current, ...loaded])));
+      });
+  }, [authUser?.id]);
+
+  useEffect(() => {
+    if (!supabase || !authUser) {
+      setWrongOnceIds([]);
+      return;
+    }
+    void supabase.from("puzzle_wrong_attempts").select("puzzle_id").eq("user_id", authUser.id)
+      .then(({ data, error }) => {
+        if (error) { console.error("puzzle_wrong_attempts load failed", error); return; }
+        const loaded = (data ?? []).map((row) => row.puzzle_id as string);
+        setWrongOnceIds((current) => Array.from(new Set([...current, ...loaded])));
       });
   }, [authUser?.id]);
 
@@ -633,13 +647,18 @@ export default function WavefrontApp() {
   }, [adaptiveLevels]);
 
   const recommendedPuzzle = useMemo(() => {
+    // A puzzle you've ever gotten wrong is excluded from the automatic pick
+    // entirely -- its answer was already shown, so re-surfacing it here adds
+    // nothing and just repeats a puzzle you've already seen fail on. It only
+    // falls back into consideration once truly nothing else is left.
     const unsolved = livePuzzles.filter((puzzle) => !solvedIds.includes(puzzle.id));
-    const inCurrentPath = unsolved.filter((puzzle) => puzzle.category === nextAdaptiveCategory);
+    const neverMissed = unsolved.filter((puzzle) => !wrongOnceIds.includes(puzzle.id));
+    const inCurrentPath = neverMissed.filter((puzzle) => puzzle.category === nextAdaptiveCategory);
     const fresh = inCurrentPath.filter((puzzle) => !attemptedIds.includes(puzzle.id));
-    const choices = fresh.length ? fresh : (inCurrentPath.length ? inCurrentPath : unsolved);
+    const choices = fresh.length ? fresh : (inCurrentPath.length ? inCurrentPath : (neverMissed.length ? neverMissed : unsolved));
     const target = adaptiveLevels[nextAdaptiveCategory] ?? 1;
     return choices.sort((a, b) => Math.abs(effectiveDifficultyById[a.id] - target) - Math.abs(effectiveDifficultyById[b.id] - target))[0] ?? livePuzzles[0];
-  }, [livePuzzles, solvedIds, attemptedIds, nextAdaptiveCategory, adaptiveLevels, effectiveDifficultyById]);
+  }, [livePuzzles, solvedIds, attemptedIds, wrongOnceIds, nextAdaptiveCategory, adaptiveLevels, effectiveDifficultyById]);
 
   const freeTrialUsedByCategory = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -703,8 +722,22 @@ export default function WavefrontApp() {
       void supabase.from("puzzle_adaptive_paths").upsert({ user_id: authUser.id, category, current_difficulty: nextDifficulty }, { onConflict: "user_id,category" })
         .then(({ error }) => { if (error) console.error("puzzle_adaptive_paths upsert failed", error); });
     }
-    if (!correct || solvedIds.includes(activePuzzle.id)) return;
-    const points = Math.max(40, 100 - revealedHints * 15);
+    if (!correct) {
+      // The correct answer and explanation are shown immediately below, so a
+      // later correct click on this same puzzle is recall, not solving --
+      // record it permanently so that retry never earns points, no matter
+      // how many sessions later it happens.
+      if (!wrongOnceIds.includes(activePuzzle.id)) {
+        setWrongOnceIds((current) => [...current, activePuzzle.id]);
+        if (supabase && authUser) {
+          void supabase.from("puzzle_wrong_attempts").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id }, { onConflict: "user_id,puzzle_id" })
+            .then(({ error }) => { if (error) console.error("puzzle_wrong_attempts upsert failed", error); });
+        }
+      }
+      return;
+    }
+    if (solvedIds.includes(activePuzzle.id)) return;
+    const points = wrongOnceIds.includes(activePuzzle.id) ? 0 : Math.max(40, 100 - revealedHints * 15);
     setSolvedIds((current) => [...current, activePuzzle.id]);
     setSolvePoints((current) => ({ ...current, [activePuzzle.id]: points }));
     setMastery((current) => ({ ...current, [activePuzzle.category]: Math.min(100, (current[activePuzzle.category] ?? 0) + points) }));
@@ -1201,6 +1234,9 @@ export default function WavefrontApp() {
                   <div className={`result-panel ${selectedOption === activePuzzle.correctOption ? "success" : "retry"}`}>
                     <span className="result-label">{selectedOption === activePuzzle.correctOption ? "Strong solve" : "Useful miss"}</span>
                     <h2>{selectedOption === activePuzzle.correctOption ? "You found the right path." : `The answer is ${activePuzzle.options[activePuzzle.correctOption]}.`}</h2>
+                    {selectedOption === activePuzzle.correctOption && wrongOnceIds.includes(activePuzzle.id) && (
+                      <p className="redemption-notice">Marked solved, but worth 0 points -- you saw the answer here before, so this attempt doesn't count toward your score.</p>
+                    )}
                     <p>{activePuzzle.explanation}</p>
                     {progressSyncNotice && <small className="daily-notice">{progressSyncNotice}</small>}
                     <div className="takeaway"><strong>Pattern to keep</strong><span>{activePuzzle.takeaway}</span></div>
@@ -1333,10 +1369,14 @@ export default function WavefrontApp() {
                       {categoryPuzzles.map((puzzle, index) => {
                         const solved = solvedIds.includes(puzzle.id);
                         const locked = !hasActivePass && !canOpenWithoutPass(puzzle);
+                        const missed = !solved && !locked && wrongOnceIds.includes(puzzle.id);
+                        const dotClass = solved ? "puzzle-dot solved" : locked ? "puzzle-dot locked" : missed ? "puzzle-dot missed" : "puzzle-dot";
+                        const dotContent = solved ? "✓" : locked ? "🔒" : missed ? "!" : index + 1;
+                        const subtitle = locked ? "Subscribe to unlock" : missed ? "Missed before · retry for 0 pts" : `${difficultyLabel(puzzle.difficulty)} · ${puzzle.time} min`;
                         return (
                           <button type="button" className={locked ? "locked" : ""} key={puzzle.id} onClick={() => startPuzzle(puzzle)}>
-                            <span className={solved ? "puzzle-dot solved" : locked ? "puzzle-dot locked" : "puzzle-dot"}>{solved ? "✓" : locked ? "🔒" : index + 1}</span>
-                            <span><strong>{puzzle.title}</strong><small>{locked ? "Subscribe to unlock" : `${difficultyLabel(puzzle.difficulty)} · ${puzzle.time} min`}</small></span><span aria-hidden="true">→</span>
+                            <span className={dotClass}>{dotContent}</span>
+                            <span><strong>{puzzle.title}</strong><small>{subtitle}</small></span><span aria-hidden="true">→</span>
                           </button>
                         );
                       })}
