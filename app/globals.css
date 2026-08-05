@@ -988,6 +988,13 @@ select:focus-visible {
   font-size: 13px;
 }
 
+.puzzle-dot.preview {
+  border-color: var(--green);
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 13px;
+}
+
 .path-puzzles button.locked strong {
   color: var(--muted);
 }
