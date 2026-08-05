@@ -680,17 +680,37 @@ export default function WavefrontApp() {
   }, [authUser?.id, realLeaders]);
   const leaders = leaderboard;
 
+  // Two fixed puzzles per category -- the easiest and the toughest, to show
+  // the range -- stay open to signed-out visitors so the real solving UI
+  // (hints, explanation, everything) can be tried before creating an
+  // account. These are NOT the signed-in free trial: always the same two
+  // puzzles, never counted against anyone's trial cap, never persisted --
+  // submitAnswer's DB writes are already all guarded on authUser, so a
+  // guest's attempt just updates local state and vanishes on refresh.
+  const guestPreviewIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const category of categories) {
+      const inCategory = livePuzzles.filter((puzzle) => puzzle.category === category.name);
+      if (!inCategory.length) continue;
+      const easiest = [...inCategory].sort((a, b) => a.difficulty - b.difficulty)[0];
+      const toughest = [...inCategory].sort((a, b) => b.difficulty - a.difficulty)[0];
+      ids.push(easiest.id);
+      if (toughest.id !== easiest.id) ids.push(toughest.id);
+    }
+    return ids;
+  }, [livePuzzles]);
+
   const startPuzzle = (puzzle: Puzzle, label?: string) => {
-    if (!authUser) {
+    if (!authUser && !guestPreviewIds.includes(puzzle.id)) {
       setAuthMessage(`Sign in to try ${FREE_TRIAL_SOLVES_PER_CATEGORY} free questions in every path.`);
       setShowAuth(true);
       return;
     }
-    if (!hasActivePass && !canOpenWithoutPass(puzzle)) {
+    if (authUser && !hasActivePass && !canOpenWithoutPass(puzzle)) {
       setShowSubscribe(true);
       return;
     }
-    if (!hasActivePass && !solvedIds.includes(puzzle.id) && !trialViewedIds.includes(puzzle.id) && supabase) {
+    if (authUser && !hasActivePass && !solvedIds.includes(puzzle.id) && !trialViewedIds.includes(puzzle.id) && supabase) {
       setTrialViewedIds((current) => [...current, puzzle.id]);
       void supabase.from("puzzle_trial_views").upsert({ user_id: authUser.id, puzzle_id: puzzle.id }, { onConflict: "user_id,puzzle_id" })
         .then(({ error }) => { if (error) console.error("puzzle_trial_views upsert failed", error); });
@@ -1353,7 +1373,7 @@ export default function WavefrontApp() {
           </section>
         ) : view === "paths" ? (
           <section className="standard-view">
-            <div className="page-heading"><span className="eyebrow">Choose your own starting point</span><h1>Explore the paths</h1><p>{hasActivePass ? "Pick any challenge from any section. Each solved block guides your next recommended challenge, but you are always free to explore." : `Try ${FREE_TRIAL_SOLVES_PER_CATEGORY} questions free in every path, picked for you the same way a subscriber's next challenge is. Solve those and subscribe to keep going.`}</p></div>
+            <div className="page-heading"><span className="eyebrow">Choose your own starting point</span><h1>Explore the paths</h1><p>{hasActivePass ? "Pick any challenge from any section. Each solved block guides your next recommended challenge, but you are always free to explore." : !authUser ? "Try the easiest and the toughest question in every path free, no sign-in needed. Create an account for 2 adaptive-picked questions per path, or subscribe for full access." : `Try ${FREE_TRIAL_SOLVES_PER_CATEGORY} questions free in every path, picked for you the same way a subscriber's next challenge is. Solve those and subscribe to keep going.`}</p></div>
             {solvedLoadNotice && <p className="tips-error">{solvedLoadNotice}</p>}
             <div className="path-list">
               {categories.map((category, categoryIndex) => {
@@ -1367,12 +1387,13 @@ export default function WavefrontApp() {
                     </div>
                     <div className="path-puzzles">
                       {categoryPuzzles.map((puzzle, index) => {
+                        const isGuestPreview = !authUser && guestPreviewIds.includes(puzzle.id);
                         const solved = solvedIds.includes(puzzle.id);
-                        const locked = !hasActivePass && !canOpenWithoutPass(puzzle);
+                        const locked = !authUser ? !isGuestPreview : (!hasActivePass && !canOpenWithoutPass(puzzle));
                         const missed = !solved && !locked && wrongOnceIds.includes(puzzle.id);
-                        const dotClass = solved ? "puzzle-dot solved" : locked ? "puzzle-dot locked" : missed ? "puzzle-dot missed" : "puzzle-dot";
-                        const dotContent = solved ? "✓" : locked ? "🔒" : missed ? "!" : index + 1;
-                        const subtitle = locked ? "Subscribe to unlock" : missed ? "Missed before · retry for 0 pts" : `${difficultyLabel(puzzle.difficulty)} · ${puzzle.time} min`;
+                        const dotClass = solved ? "puzzle-dot solved" : locked ? "puzzle-dot locked" : isGuestPreview ? "puzzle-dot preview" : missed ? "puzzle-dot missed" : "puzzle-dot";
+                        const dotContent = solved ? "✓" : locked ? "🔒" : isGuestPreview ? "👁" : missed ? "!" : index + 1;
+                        const subtitle = locked ? (authUser ? "Subscribe to unlock" : "Sign in to unlock") : isGuestPreview ? "Try it -- no sign-in needed" : missed ? "Missed before · retry for 0 pts" : `${difficultyLabel(puzzle.difficulty)} · ${puzzle.time} min`;
                         return (
                           <button type="button" className={locked ? "locked" : ""} key={puzzle.id} onClick={() => startPuzzle(puzzle)}>
                             <span className={dotClass}>{dotContent}</span>
@@ -1570,6 +1591,30 @@ export default function WavefrontApp() {
                 ))}
               </div>
             )}
+          </section>
+        ) : !authUser ? (
+          <section className="standard-view">
+            <div className="page-heading"><span className="eyebrow">Solver forum</span><h1>Community</h1><p>Debate methods, rate challenges, and submit original puzzles.</p></div>
+            <div className="forum-feed">
+              {postsLoading ? <p>Loading community posts...</p> : posts.length === 0 ? (
+                <p className="admin-empty">No community puzzles yet. Be the first to submit one.</p>
+              ) : posts.slice(0, 2).map((post) => (
+                <article className="forum-post" key={post.id}>
+                  <div className="forum-avatar">{post.author_name.slice(0, 2).toUpperCase()}</div>
+                  <div className="forum-copy">
+                    <span>{post.author_name} · {relativeTime(post.created_at)}</span>
+                    <h2>{post.title}</h2><small>{post.category}</small>
+                    {post.question && <p className="forum-question">{post.question}</p>}
+                  </div>
+                  <div className="forum-metrics"><strong>{post.rating ?? "—"}</strong><span>rating</span><strong>{post.replies}</strong><span>replies</span></div>
+                </article>
+              ))}
+            </div>
+            <div className="tips-locked">
+              <h2>{posts.length > 2 ? `That's 2 of ${posts.length} posts.` : "Sign in to join the conversation."}</h2>
+              <p>Sign in free to read the full feed and reply. Subscribe for a pass to submit your own puzzles and propose them for the next cycle.</p>
+              <button className="checkout-button" onClick={() => { setAuthMessage("Sign in to read the full community feed."); setShowAuth(true); }}>Sign in <span aria-hidden="true">→</span></button>
+            </div>
           </section>
         ) : !hasActivePass ? (
           <section className="standard-view">
