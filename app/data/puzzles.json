@@ -1,264 +1,324 @@
 [
   {
-    "id": "signal-silence-hats",
-    "title": "The Answer Hidden in Silence",
+    "id": "c2-logic-cotton-gold",
+    "title": "A Pound of Each",
     "category": "Logic & Knowledge",
-    "difficulty": 3,
-    "time": 5,
-    "question": "Three thinkers stand in a line. Ava sees Ben and Cy. Ben sees Cy. Cy sees nobody. There are three black hats and two white hats available, and each person wears one. Ava says, \"I do not know my hat colour.\" Ben hears this and says, \"I do not know either.\" Cy then says, \"Now I know.\" What colour is Cy's hat?",
-    "options": ["Black", "White", "It could be either", "There is not enough information"],
+    "difficulty": 1,
+    "time": 2,
+    "question": "Which is heavier: a pound of cotton, or a pound of gold? Cotton is sold by the ordinary commercial pound, while gold is sold by the jeweller's pound used for precious metals.",
+    "options": [
+      "The pound of cotton",
+      "The pound of gold",
+      "They weigh exactly the same",
+      "It depends on the temperature"
+    ],
     "correctOption": 0,
     "hints": [
-      "Treat each \"I do not know\" as new information, not as an empty statement.",
-      "If Ava had seen two white hats, she would have known immediately that hers was black.",
-      "After Ava speaks, Ben knows at least one of his and Cy's hats is black. If Cy's were white, Ben would know his own was black. Ben does not know, so Cy must be black."
+      "The question deliberately mentions two different kinds of pound, so they are not the same unit.",
+      "Everyday goods use the avoirdupois pound of 16 ounces; precious metals use the troy pound of 12 ounces.",
+      "Compare them in grains: an avoirdupois pound is 7,000 grains, a troy pound is 5,760 grains."
     ],
-    "explanation": "Cy's hat is black. Ava would know her own hat was black if she saw two white hats, so her uncertainty tells everyone that Ben and Cy are not both white. Ben now knows at least one of those two hats is black. If Ben could see a white hat on Cy, Ben would know that his own hat had to be black. But Ben still does not know. That means Cy cannot be wearing white, so Cy is wearing black.",
-    "takeaway": "Silence can eliminate possibilities. In knowledge puzzles, write down what each person would have known in every possible case.",
+    "explanation": "The pound of cotton is heavier. The trap is that 'a pound' is not one fixed quantity. Cotton is weighed in the avoirdupois system, where one pound is 16 ounces, or 7,000 grains. Gold, like all precious metals, is weighed in the troy system, where one pound is only 12 ounces, or 5,760 grains. So a pound of cotton outweighs a pound of gold by 1,240 grains, roughly 21 percent more mass, even though both are called 'a pound'.",
+    "takeaway": "When two quantities share a unit name, check that they are actually measured on the same scale before comparing them.",
     "verification": {
-      "method": "Exhaustive hat-assignment enumeration",
+      "method": "Direct comparison of avoirdupois and troy pound definitions in grains",
       "reviewed": true,
       "version": 1
     }
   },
   {
-    "id": "cheryls-calendar",
-    "title": "A Birthday Between the Lines",
+    "id": "c2-logic-market-wives",
+    "title": "On the Way to Market",
     "category": "Logic & Knowledge",
-    "difficulty": 4,
-    "time": 7,
-    "question": "Mira's birthday is one of these dates: May 15, May 16, May 19, June 17, June 18, July 14, July 16, August 14, August 15, or August 17. Arun is told only the month and Bela only the day. Arun says, \"I do not know, but I know Bela does not know.\" Bela says, \"Now I know.\" Arun says, \"Now I know too.\" When is Mira's birthday?",
-    "options": ["July 16", "August 15", "August 17", "July 14"],
-    "correctOption": 0,
-    "hints": [
-      "Begin with days that occur only once in the full list.",
-      "Arun's first statement rules out every month containing a day that would let Bela know immediately.",
-      "May and June disappear first. Bela's certainty then removes day 14. Arun could not choose between two August dates, so the month must be July."
-    ],
-    "explanation": "The birthday is July 16. Bela would instantly know the date if she heard 18 or 19, because those days appear only once. Arun knows Bela cannot know, so Arun cannot have heard May or June, the months containing those unique days. We are left with July 14, July 16, August 14, August 15, and August 17. Bela now knows, so her day cannot be 14. That leaves July 16, August 15, and August 17. Arun now knows too. If he had heard August, two dates would remain, so he must have heard July. The only remaining July date is July 16.",
-    "takeaway": "Start epistemic puzzles by removing values that would create instant knowledge, then repeat the filtering after every statement.",
-    "verification": {
-      "method": "Programmatic public-announcement filtering",
-      "reviewed": true,
-      "version": 1
-    }
-  },
-  {
-    "id": "potato-water",
-    "title": "The Potatoes That Lost Half",
-    "category": "Mathematical Reasoning",
-    "difficulty": 2,
+    "difficulty": 1,
     "time": 3,
-    "question": "A 100 kg pile of potatoes is 99% water. After drying, it is 98% water. The amount of solid potato does not change. What does the pile weigh now?",
-    "options": ["50 kg", "98 kg", "99 kg", "49 kg"],
+    "question": "As I was walking to market I met a man with four wives. Each wife carried four bags, each bag held four dogs, and each dog had four puppies. Counting everyone and everything described, how many were going to market?",
+    "options": [
+      "One",
+      "Four",
+      "Three hundred and forty",
+      "Three hundred and forty-one"
+    ],
     "correctOption": 0,
     "hints": [
-      "Track the part that does not change instead of the water that leaves.",
-      "At the start, the non-water part is 1% of 100 kg.",
-      "The solid part is 1 kg. After drying it is 2% of the total, so total weight is 1 divided by 0.02."
+      "Read the second sentence again and pay attention to the direction each party is travelling.",
+      "The word 'met' tells you something specific: you only meet someone who is coming towards you.",
+      "If the man and his entourage were walking towards you, they were walking away from the market, not to it."
     ],
-    "explanation": "The pile now weighs 50 kg. At first, 99 kg is water and only 1 kg is solid potato. Drying removes water but leaves that 1 kg of solid material unchanged. When the potatoes are 98% water, they are 2% solid. If 2% of the new total equals 1 kg, then the new total is 1 divided by 0.02, which is 50 kg. The surprising drop happens because the water percentage is measured against a changing total.",
-    "takeaway": "In percentage-change puzzles, identify a quantity that stays fixed and build the equation around it.",
+    "explanation": "Only one was going to market: the narrator. The puzzle invites you to multiply four wives by four bags by four dogs by four puppies and produce an impressive total, but every one of those was met on the road, which means they were travelling in the opposite direction. The single word 'met' settles the whole question before any arithmetic begins. The large numbers exist purely to pull your attention away from it.",
+    "takeaway": "Before computing anything, check that the quantity being asked for is actually the quantity the numbers describe.",
     "verification": {
-      "method": "Mass-conservation equation",
+      "method": "Direction-of-travel reading check against the stated encounter",
       "reviewed": true,
       "version": 1
     }
   },
   {
-    "id": "hundred-lockers",
-    "title": "The Hundred Locker Parade",
+    "id": "c2-math-peculiar-number",
+    "title": "Three Times Its Own Digits",
     "category": "Mathematical Reasoning",
-    "difficulty": 3,
-    "time": 5,
-    "question": "There are 100 closed lockers. On pass 1, every locker is toggled. On pass 2, every second locker is toggled. On pass 3, every third locker is toggled, and so on through pass 100. How many lockers are open at the end?",
-    "options": ["10", "50", "9", "25"],
-    "correctOption": 0,
-    "hints": [
-      "A locker changes once for each number that divides its locker number.",
-      "Most factors come in pairs, such as 2 and 6 for 12.",
-      "Only perfect squares have an odd number of factors. The open lockers are 1, 4, 9, and so on through 100."
+    "difficulty": 1,
+    "time": 3,
+    "question": "There is exactly one positive whole number that equals three times the sum of its own digits. What is that number?",
+    "options": [
+      "18",
+      "24",
+      "27",
+      "36"
     ],
-    "explanation": "Exactly 10 lockers remain open. Locker 12, for example, is toggled on passes 1, 2, 3, 4, 6, and 12. Its factors pair up, so it is toggled an even number of times and ends closed. A perfect square is different because one factor pair repeats in the middle: for 36, the pair 6 times 6 uses the same factor twice. Perfect squares therefore have an odd number of factors and end open. From 1 squared through 10 squared, there are 10 perfect squares no larger than 100.",
-    "takeaway": "When an action happens once per divisor, factor parity often turns the problem into a perfect-square test.",
+    "correctOption": 2,
+    "hints": [
+      "A number equal to three times its digit sum must be a multiple of three, which narrows the search considerably.",
+      "For a two-digit number written as 10a + b, the condition becomes 10a + b = 3(a + b).",
+      "Simplify that equation to 7a = 2b and find the single digit pair that satisfies it."
+    ],
+    "explanation": "The number is 27, because 2 + 7 = 9 and 9 × 3 = 27. To show it is the only one, write a two-digit number as 10a + b, where a and b are its digits. The condition 10a + b = 3(a + b) rearranges to 7a = 2b. Since a and b are single digits, the only solution is a = 2 and b = 7, giving 27. A one-digit number n would need n = 3n, which forces n = 0, and any number of three digits or more is far too large, since its digit sum grows much more slowly than the number itself.",
+    "takeaway": "Writing a number in terms of its digits turns a verbal condition into a small equation you can solve exhaustively.",
     "verification": {
-      "method": "Direct 100-pass toggle simulation",
+      "method": "Algebraic digit-decomposition with exhaustive search over all positive integers below 1000",
       "reviewed": true,
       "version": 1
     }
   },
   {
-    "id": "monty-switch",
-    "title": "The Door You Should Leave",
+    "id": "c2-math-special-number",
+    "title": "Double Beats Half by Forty-Five",
+    "category": "Mathematical Reasoning",
+    "difficulty": 1,
+    "time": 3,
+    "question": "There is a number whose double is greater than its half by exactly 45. What is the number?",
+    "options": [
+      "22.5",
+      "30",
+      "45",
+      "90"
+    ],
+    "correctOption": 1,
+    "hints": [
+      "Write the condition as an equation using a single unknown for the number.",
+      "Double the number minus half the number equals 45.",
+      "Two times x minus a half of x leaves one and a half times x, so divide 45 by 1.5."
+    ],
+    "explanation": "The number is 30. Calling the number x, the condition says 2x − x/2 = 45. The left side simplifies to 1.5x, so x = 45 ÷ 1.5 = 30. Checking directly: double 30 is 60, half of 30 is 15, and 60 − 15 = 45, exactly as required. The common wrong answer of 45 comes from reading the question as though the number itself were the difference rather than the source of the difference.",
+    "takeaway": "Translate a comparison sentence into an equation before doing any arithmetic, so the unknown appears only once you have simplified.",
+    "verification": {
+      "method": "Single-variable linear equation with direct substitution check",
+      "reviewed": true,
+      "version": 1
+    }
+  },
+  {
+    "id": "c2-prob-face-card",
+    "title": "Drawing a Face Card",
+    "category": "Probability & Strategy",
+    "difficulty": 1,
+    "time": 3,
+    "question": "A single card is drawn at random from a standard 52-card deck. What is the probability that it is a face card, meaning a Jack, Queen, or King?",
+    "options": [
+      "1/13",
+      "3/13",
+      "1/4",
+      "3/4"
+    ],
+    "correctOption": 1,
+    "hints": [
+      "Count how many face cards exist in one suit, then multiply by the number of suits.",
+      "Each of the four suits contains a Jack, a Queen, and a King, giving three face cards per suit.",
+      "Twelve face cards out of 52 total cards reduces to a simpler fraction."
+    ],
+    "explanation": "The probability is 3/13. Each of the four suits contains exactly three face cards, the Jack, Queen, and King, so there are 4 × 3 = 12 face cards in the deck. Since every card is equally likely to be drawn, the probability is 12 out of 52. Dividing top and bottom by 4 reduces this to 3/13, roughly 23 percent. The common wrong answer of 1/4 comes from confusing the number of suits with the proportion of face cards.",
+    "takeaway": "For a single fair draw, count the favourable items and divide by the total, then reduce the fraction rather than guessing from the structure.",
+    "verification": {
+      "method": "Direct favourable-over-total count on a fully enumerated 52-card sample space",
+      "reviewed": true,
+      "version": 1
+    }
+  },
+  {
+    "id": "c2-prob-marbles-two-same",
+    "title": "Two of a Colour",
     "category": "Probability & Strategy",
     "difficulty": 2,
     "time": 4,
-    "question": "A prize is hidden behind one of three doors. You choose Door 1. A host who knows the answer always opens a different door containing no prize, then offers you the remaining closed door. Which strategy gives the best chance of winning?",
-    "options": ["Switch; the chance is 2/3", "Stay; the chance is 2/3", "Either; both are 1/2", "Switch only if Door 3 was opened"],
-    "correctOption": 0,
-    "hints": [
-      "Keep your original probability unchanged after the host acts.",
-      "Your first door was right only one time out of three.",
-      "Your first choice loses two times out of three. In both losing cases, the host is forced to leave the prize door closed, so switching wins."
+    "question": "A box holds twelve marbles: four green, four yellow, and four blue. Reaching in without looking, how many marbles must you take out to be absolutely certain you have at least two of the same colour?",
+    "options": [
+      "3",
+      "4",
+      "5",
+      "7"
     ],
-    "explanation": "You should switch, giving a 2 out of 3 chance of winning. Your first choice has only a 1 out of 3 chance of being correct. The other two doors together therefore carry a 2 out of 3 chance. The host does not open a random door: the host deliberately reveals an empty one. That action transfers the full 2 out of 3 chance of the two-door group onto the single unopened alternative. Staying wins only when your first guess was right; switching wins whenever your first guess was wrong.",
-    "takeaway": "Ask whether revealed information was random or deliberately selected. A knowledgeable host changes what the reveal means.",
+    "correctOption": 1,
+    "hints": [
+      "Think about the unluckiest possible sequence of draws rather than a typical one.",
+      "The worst case is drawing one marble of every colour before any colour repeats.",
+      "There are three colours, so once you have three different marbles, the very next one must repeat a colour."
+    ],
+    "explanation": "You need four marbles. In the worst possible case your first three draws are one green, one yellow, and one blue, giving you no matching pair at all. But there are only three colours available, so a fourth marble must match one of the three you already hold. Three marbles is not enough, since the all-different case is genuinely possible. Note that the counts of four per colour never enter the calculation; only the number of colours matters, because the box holds enough of each colour to make the worst case possible.",
+    "takeaway": "For a guarantee, count the distinct categories rather than the quantities, then add one to force a repeat.",
     "verification": {
-      "method": "Exact three-case outcome enumeration",
+      "method": "Pigeonhole-principle bound with an explicit worst-case draw sequence",
       "reviewed": true,
       "version": 1
     }
   },
   {
-    "id": "birthday-collision",
-    "title": "A Crowded Birthday Room",
-    "category": "Probability & Strategy",
-    "difficulty": 3,
-    "time": 5,
-    "question": "Ignoring leap years and assuming birthdays are evenly distributed, which group size first makes it more likely than not that at least two people share a birthday?",
-    "options": ["23 people", "50 people", "183 people", "366 people"],
-    "correctOption": 0,
-    "hints": [
-      "It is easier to calculate the opposite event: everyone has a different birthday.",
-      "For 23 people, multiply 365/365 by 364/365, then 363/365, continuing for all 23 people.",
-      "With 22 people the collision chance is about 47.6%. With 23 it rises to about 50.7%, crossing the halfway mark."
-    ],
-    "explanation": "The answer is 23 people. We calculate the chance that all birthdays are different and subtract it from 1. The first person can have any birthday. The second must avoid one used day, the third must avoid two used days, and so on. For 23 people, the all-different probability is about 49.3%, so the chance of at least one shared birthday is about 50.7%. With only 22 people, the shared-birthday chance is still about 47.6%, so 23 is the first group size above 50%.",
-    "takeaway": "For an 'at least one' probability, calculate the chance of none happening and subtract from 1.",
-    "verification": {
-      "method": "High-precision complement probability calculation",
-      "reviewed": true,
-      "version": 1
-    }
-  },
-  {
-    "id": "bridge-torch",
-    "title": "Seventeen Minutes Across",
+    "id": "c2-algo-gong-strikes",
+    "title": "Striking Ten",
     "category": "Algorithms & Optimization",
-    "difficulty": 3,
-    "time": 6,
-    "question": "Four people take 1, 2, 5, and 10 minutes to cross a bridge. At most two can cross at once, they need one torch, and a pair moves at the slower person's speed. What is the shortest time for everyone to cross?",
-    "options": ["17 minutes", "19 minutes", "21 minutes", "15 minutes"],
-    "correctOption": 0,
-    "hints": [
-      "The fastest person does not always need to escort every slower person.",
-      "Try using the two fastest people as a shuttle team.",
-      "Send 1 and 2 across, 1 returns, 5 and 10 cross, 2 returns, then 1 and 2 cross again."
+    "difficulty": 1,
+    "time": 3,
+    "question": "A clock takes 7 seconds to strike 7 o'clock, measured from the first gong to the last. How long does the same clock take to strike 10 o'clock?",
+    "options": [
+      "7 seconds",
+      "9 seconds",
+      "10 seconds",
+      "10.5 seconds"
     ],
-    "explanation": "The minimum is 17 minutes. First, the 1-minute and 2-minute people cross together, costing 2 minutes. The 1-minute person returns, making 3. The 5-minute and 10-minute people cross together, making 13. The 2-minute person returns, making 15. Finally, the 1-minute and 2-minute people cross again, making 17. Sending the fastest person separately with each slow person costs more. An exhaustive search of every legal crossing sequence confirms that no plan finishes in less than 17 minutes.",
-    "takeaway": "Optimization problems often improve when expensive items are grouped together and cheap helpers handle the returns.",
+    "correctOption": 3,
+    "hints": [
+      "The time is spent in the gaps between gongs, not in the gongs themselves.",
+      "Seven gongs have only six gaps between them, so each gap lasts 7/6 of a second.",
+      "Ten gongs have nine gaps, so multiply nine by 7/6."
+    ],
+    "explanation": "It takes 10.5 seconds. The elapsed time is measured across the gaps between gongs, and seven gongs contain only six gaps. Since those six gaps take 7 seconds altogether, each gap lasts 7/6 of a second. Striking ten involves ten gongs and therefore nine gaps, giving 9 × 7/6 = 63/6 = 10.5 seconds. The intuitive answer of 10 seconds comes from assuming each gong takes one second, which would only be right if the timing included a gap after the final gong.",
+    "takeaway": "When something is measured between events rather than across them, the number of intervals is one less than the number of events.",
     "verification": {
-      "method": "Dijkstra search across every legal bridge state",
+      "method": "Interval counting with the per-gap duration computed and reapplied",
       "reviewed": true,
       "version": 1
     }
   },
   {
-    "id": "twenty-five-horses",
-    "title": "Seven Races, No Stopwatch",
+    "id": "c2-algo-saw-twelve",
+    "title": "Twelve Equal Pieces",
     "category": "Algorithms & Optimization",
-    "difficulty": 4,
-    "time": 8,
-    "question": "You have 25 horses, a five-lane track, and no stopwatch. A race tells you only the order of its five runners. What is the minimum number of races needed to guarantee finding the three fastest horses in order?",
-    "options": ["7 races", "6 races", "8 races", "10 races"],
-    "correctOption": 0,
-    "hints": [
-      "First create five internally ordered groups.",
-      "After racing the five group winners, eliminate every horse that already has at least three known horses ahead of it.",
-      "Five group races plus one winners' race identify the fastest horse and leave five candidates for second and third. Race those five once more."
+    "difficulty": 1,
+    "time": 3,
+    "question": "A tree trunk can be sawn through in exactly one minute per cut. How long does it take to saw the trunk into twelve equal pieces?",
+    "options": [
+      "6 minutes",
+      "11 minutes",
+      "12 minutes",
+      "13 minutes"
     ],
-    "explanation": "Seven races are necessary and sufficient. Race five groups of five, using five races. Race the five group winners in race six. Suppose the winners finish A1, B1, C1, D1, E1. A1 is fastest overall. Every horse in groups D and E is eliminated, as are horses too far down the other groups. Only A2, A3, B1, B2, and C1 can still be second or third. Race those five in race seven; the first two finishers are second and third overall. Six races cannot settle the remaining comparisons, so seven is the minimum.",
-    "takeaway": "Use known comparisons as a graph. Remove any candidate that already has enough proven predecessors to miss the target rank.",
+    "correctOption": 1,
+    "hints": [
+      "Count how many cuts are actually needed, not how many pieces you end up with.",
+      "The first cut turns one piece into two, the second turns two into three, and so on.",
+      "To reach twelve pieces you need eleven cuts."
+    ],
+    "explanation": "It takes 11 minutes. Every cut increases the number of pieces by exactly one, so starting from a single trunk you need eleven cuts to reach twelve pieces. At one minute per cut that is 11 minutes. The natural but wrong answer of 12 minutes assumes one cut per piece, but the twelfth piece is created by the same cut that creates the eleventh, so no separate cut is needed for it.",
+    "takeaway": "Cuts and resulting pieces differ by exactly one, so count the operations rather than the outputs.",
     "verification": {
-      "method": "Comparison-graph elimination and lower-bound review",
+      "method": "Off-by-one interval count verified by incremental piece tracking",
       "reviewed": true,
       "version": 1
     }
   },
   {
-    "id": "mutilated-board",
-    "title": "Two Missing Corners",
+    "id": "c2-spatial-ladder-window",
+    "title": "Up to the Window",
     "category": "Spatial Reasoning",
-    "difficulty": 3,
-    "time": 5,
-    "question": "Remove two opposite corner squares from a standard 8 by 8 chessboard. Can the remaining 62 squares be covered exactly by 31 dominoes, each covering two edge-touching squares?",
-    "options": ["No, it is impossible", "Yes, in exactly one way", "Yes, in many ways", "Only if the centre squares are covered first"],
-    "correctOption": 0,
-    "hints": [
-      "Focus on a property every domino must have, regardless of where it is placed.",
-      "Every edge-touching pair contains one black square and one white square.",
-      "Opposite corners have the same colour. Removing both leaves 30 squares of one colour and 32 of the other, but 31 dominoes would cover 31 of each."
+    "difficulty": 1,
+    "time": 3,
+    "question": "A window sits 40 feet above the ground. A ladder is placed with its foot 9 feet out from the base of the wall, and its top exactly reaches the window. How long is the ladder?",
+    "options": [
+      "31 feet",
+      "41 feet",
+      "45 feet",
+      "49 feet"
     ],
-    "explanation": "It is impossible. Colour the board like a normal chessboard. Every domino placed on two edge-touching squares must cover exactly one black square and one white square. Opposite corners of an 8 by 8 board have the same colour. Removing them leaves 30 squares of that colour and 32 of the other colour. But 31 dominoes would always cover 31 black and 31 white squares. Because the colour counts do not match what dominoes require, no arrangement can cover the board.",
-    "takeaway": "Look for an invariant: a property every legal move preserves even when the exact arrangement is hard to imagine.",
+    "correctOption": 1,
+    "hints": [
+      "The wall, the ground, and the ladder form a right-angled triangle.",
+      "The ladder is the hypotenuse, so square the other two sides and add them.",
+      "Compute 40 squared plus 9 squared, then take the square root."
+    ],
+    "explanation": "The ladder is 41 feet long. The wall and the ground meet at a right angle, so the ladder forms the hypotenuse of a right-angled triangle with legs of 40 feet and 9 feet. By Pythagoras, the ladder's length squared equals 40 squared plus 9 squared, which is 1,600 + 81 = 1,681. The square root of 1,681 is exactly 41. The numbers 9, 40, and 41 form one of the less familiar whole-number right triangles, which is why the answer comes out clean.",
+    "takeaway": "A wall meeting the ground gives you a right angle for free, so ladder problems are almost always Pythagoras in disguise.",
     "verification": {
-      "method": "Checkerboard colour invariant",
+      "method": "Pythagorean computation with an exact integer square root",
       "reviewed": true,
       "version": 1
     }
   },
   {
-    "id": "painted-cube",
-    "title": "Edges of a Painted Cube",
+    "id": "c2-spatial-cube-three-faces",
+    "title": "Corners of the Painted Cube",
     "category": "Spatial Reasoning",
     "difficulty": 2,
     "time": 4,
-    "question": "A large cube is painted on all six outside faces, then cut into 27 equal small cubes in a 3 by 3 by 3 grid. How many small cubes have exactly two painted faces?",
-    "options": ["12", "8", "6", "18"],
-    "correctOption": 0,
-    "hints": [
-      "Classify small cubes as corners, edge pieces, face centres, and the hidden centre.",
-      "A cube with exactly two painted faces sits on an edge but not at a corner.",
-      "The large cube has 12 edges. In a 3 by 3 by 3 cube, each edge has exactly one non-corner small cube."
+    "question": "A wooden cube measuring 3 inches on each side is painted on all six outer faces, then cut into 27 one-inch cubes. How many of the small cubes have paint on exactly three faces?",
+    "options": [
+      "6",
+      "8",
+      "12",
+      "26"
     ],
-    "explanation": "There are 12 small cubes with exactly two painted faces. Such a cube must sit along an edge of the large cube, because two outside faces meet at each edge. Corner cubes have three painted faces, so we do not count them. A 3 by 3 by 3 cube has one middle cube on each edge between its two corners. Since a cube has 12 edges and each edge contributes one qualifying small cube, the total is 12.",
-    "takeaway": "For painted-cube problems, sort pieces by location: corners have three painted faces, edges two, face interiors one, and internal cubes zero.",
+    "correctOption": 1,
+    "hints": [
+      "A small cube gets paint on a face only where that face lay on the outside of the big cube.",
+      "Ask which positions in the big cube touch the outside on three different sides at once.",
+      "Only the corners of a cube meet three outer faces."
+    ],
+    "explanation": "Exactly 8 small cubes have three painted faces. A small cube shows paint on a face only where that face formed part of the big cube's surface. A position touching three outer faces at once must sit where three faces meet, and on any cube that means a corner. Every cube has exactly 8 corners, so 8 small cubes are painted on three faces. For completeness, the 12 edge positions have two painted faces, the 6 face-centre positions have one, and the single core cube has none, which accounts for all 27.",
+    "takeaway": "The number of painted faces on a sub-cube is determined purely by its position type: corner, edge, face, or core.",
     "verification": {
-      "method": "Coordinate enumeration of all 27 small cubes",
+      "method": "Positional classification of all 27 sub-cubes with the counts summed as a check",
       "reviewed": true,
       "version": 1
     }
   },
   {
-    "id": "reverse-1089",
-    "title": "The 1089 Machine",
+    "id": "c2-pattern-blow-hot-cold",
+    "title": "Where the Scales Agree",
     "category": "Patterns & Numbers",
-    "difficulty": 2,
+    "difficulty": 1,
     "time": 3,
-    "question": "Start with 532. Reverse it to get 235 and subtract the smaller from the larger. Reverse that result and add the two results together. What number do you get?",
-    "options": ["1089", "999", "792", "1188"],
-    "correctOption": 0,
-    "hints": [
-      "Keep leading zeroes if they appear in similar versions of this trick.",
-      "First calculate 532 minus 235.",
-      "532 minus 235 is 297. Reverse 297 to get 792, then add 297 and 792."
+    "question": "Water freezes at 0 degrees Celsius, which is 32 degrees Fahrenheit, and boils at 100 Celsius, which is 212 Fahrenheit. There is exactly one temperature that reads the same number on both scales. What is it?",
+    "options": [
+      "0 degrees",
+      "32 degrees",
+      "Minus 40 degrees",
+      "Minus 32 degrees"
     ],
-    "explanation": "The result is 1089. First subtract the reversed number: 532 minus 235 equals 297. Reverse 297 to get 792. Finally, add 297 and 792, which equals 1089. This works for many three-digit starting numbers when the first and last digits differ by at least two. Algebra shows that the subtraction creates a structured multiple of 99, and reversing then adding completes the 1089 pattern.",
-    "takeaway": "When a digit trick seems magical, write the number using place values such as 100a + 10b + c and simplify.",
+    "correctOption": 2,
+    "hints": [
+      "Write the conversion rule as F equals nine fifths of C, plus 32.",
+      "You want the temperature where F and C are the same number, so replace F with C.",
+      "Solve C equals nine fifths of C, plus 32."
+    ],
+    "explanation": "The scales agree at minus 40 degrees. The conversion is F = (9/5)C + 32. Setting F equal to C gives C = (9/5)C + 32. Subtracting (9/5)C from both sides leaves −(4/5)C = 32, so C = −40. Checking directly: (9/5)(−40) + 32 = −72 + 32 = −40, which matches. There is exactly one such point because the two scales are straight lines with different slopes, and two non-parallel lines cross exactly once.",
+    "takeaway": "To find where two linear scales agree, set them equal and solve; non-parallel lines always meet at exactly one point.",
     "verification": {
-      "method": "Direct arithmetic and place-value identity",
+      "method": "Linear equation solved with a direct substitution check into the conversion formula",
       "reviewed": true,
       "version": 1
     }
   },
   {
-    "id": "look-and-say",
-    "title": "Read What You See",
+    "id": "c2-pattern-bus-number",
+    "title": "The Upside-Down Bus",
     "category": "Patterns & Numbers",
     "difficulty": 2,
-    "time": 3,
-    "question": "What comes next in this sequence: 1, 11, 21, 1211, 111221, ...?",
-    "options": ["312211", "1113213211", "122111", "311221"],
-    "correctOption": 0,
-    "hints": [
-      "The terms describe something rather than following ordinary arithmetic.",
-      "Read each term aloud in groups of repeated digits.",
-      "111221 contains three 1s, two 2s, and one 1. Write those counts and digits in order."
+    "time": 4,
+    "question": "A bus carries a three-digit number that is a perfect square. When the number plate is turned upside down, the digits still read as a number, and that number is also a perfect square. The bus company numbers its buses from 1 to 500. What is the bus number?",
+    "options": [
+      "121",
+      "144",
+      "169",
+      "196"
     ],
-    "explanation": "The next term is 312211. Each line describes the groups in the line before it. The term 111221 contains a group of three 1s, followed by a group of two 2s, followed by one 1. Writing those descriptions as digits gives 31, then 22, then 11. Put them together and you get 312211. This is called the look-and-say sequence because you look at one term and say what you see.",
-    "takeaway": "Before searching for arithmetic, test whether a sequence describes the previous term's structure, grouping, or spelling.",
+    "correctOption": 3,
+    "hints": [
+      "Only the digits 0, 1, 6, 8, and 9 remain readable when turned upside down, with 6 and 9 swapping places.",
+      "So the number must be a three-digit perfect square using only those five digits.",
+      "Check each candidate by rotating it and testing whether the result is also a perfect square."
+    ],
+    "explanation": "The bus number is 196. Turning a plate upside down reverses the digit order and rotates each digit, and only 0, 1, 6, 8, and 9 survive that rotation, with 6 becoming 9 and 9 becoming 6. So the number must be a three-digit perfect square built only from those digits. Checking the three-digit squares under 500, the candidates using only rotatable digits are 100, 169, and 196. Rotating 100 gives 001, which is not a genuine three-digit number. Rotating 169 gives 691, which is not a perfect square. Rotating 196 gives 961, which is 31 squared. So 196, itself 14 squared, is the answer.",
+    "takeaway": "When a puzzle involves physically rotating digits, first restrict to the digits that survive rotation, which usually leaves only a handful of candidates to test.",
     "verification": {
-      "method": "Run-length encoding transformation",
+      "method": "Exhaustive search over three-digit perfect squares below 500 with rotation validity and squareness both re-tested",
       "reviewed": true,
       "version": 1
     }

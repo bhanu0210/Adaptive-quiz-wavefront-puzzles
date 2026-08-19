@@ -58,192 +58,116 @@ test("launch expansion supplies thirteen original puzzles for each path", () => 
   assert.ok(!launchExpansionSource.includes("reference: \""), "expansion must not publish copied source references");
 });
 
-test("hat puzzle is forced by exhaustive knowledge-state filtering", () => {
-  const colors = ["Black", "White"];
-  const states = [];
+test("cotton outweighs gold under avoirdupois versus troy grains", () => {
+  const avoirdupoisPoundInGrains = 7000;
+  const troyPoundInGrains = 5760;
+  assert.ok(avoirdupoisPoundInGrains > troyPoundInGrains);
+  assert.equal(publishedAnswer("c2-logic-cotton-gold"), "The pound of cotton");
+});
 
-  for (const ava of colors) {
-    for (const ben of colors) {
-      for (const cy of colors) {
-        const whites = [ava, ben, cy].filter((color) => color === "White").length;
-        if (whites <= 2) states.push({ ava, ben, cy });
-      }
-    }
+test("only the narrator was travelling toward the market", () => {
+  // Everyone else in the riddle was *met* on the road, i.e. travelling the
+  // opposite direction from the narrator, so they don't count toward
+  // "going to market" no matter how the wives/bags/dogs/puppies multiply out.
+  const metOnTheRoad = 4 * 4 * 4 * 4;
+  assert.ok(metOnTheRoad > 1, "the large total is a distraction, not the answer");
+  assert.equal(publishedAnswer("c2-logic-market-wives"), "One");
+});
+
+test("27 is the unique two-digit number equal to three times its digit sum", () => {
+  const matches = [];
+  for (let n = 1; n < 1000; n += 1) {
+    const digitSum = String(n).split("").reduce((sum, digit) => sum + Number(digit), 0);
+    if (n === 3 * digitSum) matches.push(n);
   }
-
-  const afterAva = states.filter((actual) => {
-    const possibilities = states.filter(
-      (state) => state.ben === actual.ben && state.cy === actual.cy,
-    );
-    return new Set(possibilities.map((state) => state.ava)).size > 1;
-  });
-
-  const afterBen = afterAva.filter((actual) => {
-    const possibilities = afterAva.filter((state) => state.cy === actual.cy);
-    return new Set(possibilities.map((state) => state.ben)).size > 1;
-  });
-
-  assert.deepEqual([...new Set(afterBen.map((state) => state.cy))], ["Black"]);
-  assert.equal(publishedAnswer("signal-silence-hats"), "Black");
+  assert.deepEqual(matches, [27]);
+  assert.equal(publishedAnswer("c2-math-peculiar-number"), "27");
 });
 
-test("calendar dialogue leaves exactly July 16", () => {
-  const dates = [
-    ["May", 15], ["May", 16], ["May", 19], ["June", 17], ["June", 18],
-    ["July", 14], ["July", 16], ["August", 14], ["August", 15], ["August", 17],
-  ].map(([month, day]) => ({ month, day }));
-
-  const daysFor = (set, day) => set.filter((date) => date.day === day);
-  const monthsFor = (set, month) => set.filter((date) => date.month === month);
-
-  const afterArun1 = dates.filter((actual) => {
-    const monthDates = monthsFor(dates, actual.month);
-    return monthDates.length > 1 &&
-      monthDates.every((date) => daysFor(dates, date.day).length > 1);
-  });
-  const afterBela = afterArun1.filter(
-    (actual) => daysFor(afterArun1, actual.day).length === 1,
-  );
-  const afterArun2 = afterBela.filter(
-    (actual) => monthsFor(afterBela, actual.month).length === 1,
-  );
-
-  assert.deepEqual(afterArun2, [{ month: "July", day: 16 }]);
-  assert.equal(publishedAnswer("cheryls-calendar"), "July 16");
+test("30 is the unique number whose double exceeds its half by 45", () => {
+  const x = 45 / 1.5;
+  assert.equal(x, 30);
+  assert.equal(2 * x - x / 2, 45);
+  assert.equal(publishedAnswer("c2-math-special-number"), "30");
 });
 
-test("potato answer conserves one kilogram of solids", () => {
-  const initialSolid = 100 * (1 - 0.99);
-  const finalWeight = initialSolid / (1 - 0.98);
-  assert.ok(Math.abs(finalWeight - 50) < 1e-9);
-  assert.equal(publishedAnswer("potato-water"), "50 kg");
+test("a standard deck has twelve face cards, reducing to 3/13", () => {
+  const faceCards = 4 * 3; // Jack, Queen, King per suit
+  const deck = 52;
+  assert.equal(faceCards / deck, 3 / 13);
+  assert.equal(publishedAnswer("c2-prob-face-card"), "3/13");
 });
 
-test("locker simulation leaves ten perfect-square lockers open", () => {
-  const open = Array(100).fill(false);
-  for (let pass = 1; pass <= 100; pass += 1) {
-    for (let locker = pass; locker <= 100; locker += pass) {
-      open[locker - 1] = !open[locker - 1];
-    }
-  }
-  assert.equal(open.filter(Boolean).length, 10);
-  assert.equal(publishedAnswer("hundred-lockers"), "10");
+test("pigeonhole forces a matching pair on the fourth marble draw", () => {
+  const colors = 3;
+  const guaranteedDraws = colors + 1;
+  assert.equal(guaranteedDraws, 4);
+  // Confirm three draws is genuinely insufficient: an all-different case exists.
+  const worstCase = ["green", "yellow", "blue"];
+  assert.equal(new Set(worstCase).size, worstCase.length);
+  assert.equal(publishedAnswer("c2-prob-marbles-two-same"), "4");
 });
 
-test("switching wins two of the three exact Monty Hall cases", () => {
-  const prizes = [0, 1, 2];
-  const switchWins = prizes.filter((prize) => prize !== 0).length;
-  assert.equal(switchWins / prizes.length, 2 / 3);
-  assert.equal(publishedAnswer("monty-switch"), "Switch; the chance is 2/3");
+test("gong intervals give 10.5 seconds to strike ten", () => {
+  const secondsPerGap = 7 / 6; // seven gongs = six gaps, taking 7 seconds total
+  const tenGongGaps = 9;
+  assert.equal(tenGongGaps * secondsPerGap, 10.5);
+  assert.equal(publishedAnswer("c2-algo-gong-strikes"), "10.5 seconds");
 });
 
-test("23 is the first birthday group above a 50 percent collision chance", () => {
-  let allDifferent = 1;
-  let firstOverHalf = null;
-  for (let people = 1; people <= 365; people += 1) {
-    if (people > 1) allDifferent *= (366 - people) / 365;
-    if (1 - allDifferent > 0.5) {
-      firstOverHalf = people;
-      break;
-    }
-  }
-  assert.equal(firstOverHalf, 23);
-  assert.equal(publishedAnswer("birthday-collision"), "23 people");
+test("twelve pieces require eleven cuts, not twelve", () => {
+  const pieces = 12;
+  const cutsNeeded = pieces - 1;
+  assert.equal(cutsNeeded, 11);
+  assert.equal(publishedAnswer("c2-algo-saw-twelve"), "11 minutes");
 });
 
-test("bridge state search proves 17 minutes is optimal", () => {
-  const times = [1, 2, 5, 10];
-  const goal = 0b1111;
-  const distances = new Map([["0-0", 0]]);
-  const queue = [{ mask: 0, torch: 0, cost: 0 }];
-
-  while (queue.length) {
-    queue.sort((a, b) => a.cost - b.cost);
-    const state = queue.shift();
-    const key = `${state.mask}-${state.torch}`;
-    if (state.cost !== distances.get(key)) continue;
-    if (state.mask === goal && state.torch === 1) break;
-
-    const available = times
-      .map((_, index) => index)
-      .filter((index) => Boolean(state.mask & (1 << index)) === Boolean(state.torch));
-    const moves = available.flatMap((a, index) => [
-      [a],
-      ...available.slice(index + 1).map((b) => [a, b]),
-    ]);
-
-    for (const move of moves) {
-      let nextMask = state.mask;
-      for (const person of move) nextMask ^= 1 << person;
-      const nextTorch = 1 - state.torch;
-      const nextCost = state.cost + Math.max(...move.map((person) => times[person]));
-      const nextKey = `${nextMask}-${nextTorch}`;
-      if (nextCost < (distances.get(nextKey) ?? Infinity)) {
-        distances.set(nextKey, nextCost);
-        queue.push({ mask: nextMask, torch: nextTorch, cost: nextCost });
-      }
-    }
-  }
-
-  assert.equal(distances.get(`${goal}-1`), 17);
-  assert.equal(publishedAnswer("bridge-torch"), "17 minutes");
+test("Pythagoras confirms the 9-40-41 ladder triangle", () => {
+  const ladder = Math.sqrt(40 ** 2 + 9 ** 2);
+  assert.equal(ladder, 41);
+  assert.equal(publishedAnswer("c2-spatial-ladder-window"), "41 feet");
 });
 
-test("horse comparison construction uses seven races", () => {
-  const groupRaces = 25 / 5;
-  const winnersRace = 1;
-  const finalCandidates = ["A2", "A3", "B1", "B2", "C1"];
-  const finalRace = Number(finalCandidates.length <= 5);
-  assert.equal(groupRaces + winnersRace + finalRace, 7);
-  assert.equal(publishedAnswer("twenty-five-horses"), "7 races");
-});
-
-test("opposite-corner removal breaks the chessboard color invariant", () => {
-  let black = 0;
-  let white = 0;
-  for (let row = 0; row < 8; row += 1) {
-    for (let column = 0; column < 8; column += 1) {
-      if ((row === 0 && column === 0) || (row === 7 && column === 7)) continue;
-      if ((row + column) % 2 === 0) black += 1;
-      else white += 1;
-    }
-  }
-  assert.deepEqual([black, white].sort((a, b) => a - b), [30, 32]);
-  assert.equal(publishedAnswer("mutilated-board"), "No, it is impossible");
-});
-
-test("coordinate enumeration finds twelve cubes with two painted faces", () => {
-  let exactlyTwo = 0;
+test("coordinate enumeration finds eight cubes with three painted faces", () => {
+  let exactlyThree = 0;
   for (let x = 0; x < 3; x += 1) {
     for (let y = 0; y < 3; y += 1) {
       for (let z = 0; z < 3; z += 1) {
         const paintedFaces = [x, y, z].filter((value) => value === 0 || value === 2).length;
-        if (paintedFaces === 2) exactlyTwo += 1;
+        if (paintedFaces === 3) exactlyThree += 1;
       }
     }
   }
-  assert.equal(exactlyTwo, 12);
-  assert.equal(publishedAnswer("painted-cube"), "12");
+  assert.equal(exactlyThree, 8, "a cube has exactly eight corners");
+  assert.equal(publishedAnswer("c2-spatial-cube-three-faces"), "8");
 });
 
-test("1089 arithmetic is independently recomputed", () => {
-  const difference = 532 - 235;
-  const reverse = Number(String(difference).padStart(3, "0").split("").reverse().join(""));
-  assert.equal(difference + reverse, 1089);
-  assert.equal(publishedAnswer("reverse-1089"), "1089");
-});
-
-test("look-and-say transformation produces 312211", () => {
-  const input = "111221";
-  let output = "";
-  for (let index = 0; index < input.length;) {
-    let end = index + 1;
-    while (end < input.length && input[end] === input[index]) end += 1;
-    output += `${end - index}${input[index]}`;
-    index = end;
+test("Celsius and Fahrenheit scales agree only at minus 40", () => {
+  const toFahrenheit = (celsius) => (9 / 5) * celsius + 32;
+  const matches = [];
+  for (let c = -100; c <= 100; c += 1) {
+    if (toFahrenheit(c) === c) matches.push(c);
   }
-  assert.equal(output, "312211");
-  assert.equal(publishedAnswer("look-and-say"), "312211");
+  assert.deepEqual(matches, [-40]);
+  assert.equal(publishedAnswer("c2-pattern-blow-hot-cold"), "Minus 40 degrees");
+});
+
+test("196 is the only rotatable three-digit square under 500 that stays square", () => {
+  const rotatable = new Set(["0", "1", "6", "8", "9"]);
+  const flip = { 0: "0", 1: "1", 6: "9", 8: "8", 9: "6" };
+  const isSquare = (n) => Number.isInteger(Math.sqrt(n));
+
+  const matches = [];
+  for (let n = 100; n < 500; n += 1) {
+    if (!isSquare(n)) continue;
+    const digits = String(n).split("");
+    if (!digits.every((d) => rotatable.has(d))) continue;
+    const rotated = digits.map((d) => flip[d]).reverse().join("");
+    if (rotated[0] === "0") continue; // not a genuine three-digit number upside down
+    if (isSquare(Number(rotated))) matches.push(n);
+  }
+  assert.deepEqual(matches, [196]);
+  assert.equal(publishedAnswer("c2-pattern-bus-number"), "196");
 });
 
 test("tuesday-boy inclusion-exclusion over 196 gender-day pairs gives 13/27", () => {
