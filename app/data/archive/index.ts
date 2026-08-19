@@ -9,6 +9,8 @@
 // stay globally unique forever -- never reuse an id even after its cycle
 // is removed from here.
 
+import { cycle1Puzzles } from "./cycle-1";
+
 export type ArchivedPuzzle = {
   id: string;
   title: string;
@@ -31,4 +33,6 @@ export type ArchivedCycle = {
   puzzles: readonly ArchivedPuzzle[];
 };
 
-export const archivedCycles: readonly ArchivedCycle[] = [];
+export const archivedCycles: readonly ArchivedCycle[] = [
+  { cycleNumber: 1, startedAt: "2026-07-28", endedAt: "2026-08-19", puzzles: cycle1Puzzles },
+];

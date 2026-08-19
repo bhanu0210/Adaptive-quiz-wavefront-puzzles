@@ -8,8 +8,8 @@ export type CycleMeta = {
 };
 
 export const currentCycle: CycleMeta = {
-  cycleNumber: 1,
-  startedAt: "2026-07-28",
+  cycleNumber: 2,
+  startedAt: "2026-08-19",
   rotationDays: 14,
   puzzleCount: 90,
 };
