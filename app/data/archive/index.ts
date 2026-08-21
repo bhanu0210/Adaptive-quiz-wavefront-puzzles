@@ -9,7 +9,12 @@
 // stay globally unique forever -- never reuse an id even after its cycle
 // is removed from here.
 
-import { cycle1Puzzles } from "./cycle-1";
+// Explicit .ts extension: tsconfig's "bundler" moduleResolution allows it,
+// and it's required for tests/puzzle-accuracy.test.mjs's Node-native
+// dynamic import() of this file to resolve the nested import at all --
+// Node's loader (unlike webpack/Turbopack) doesn't do extensionless
+// resolution.
+import { cycle1Puzzles } from "./cycle-1.ts";
 
 export type ArchivedPuzzle = {
   id: string;

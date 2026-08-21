@@ -10,6 +10,7 @@ const launchExpansionSource = await readFile(
   "utf8",
 );
 const { launchExpansion } = await import("../app/data/launch-expansion.ts");
+const { archivedCycles } = await import("../app/data/archive/index.ts");
 
 const byId = new Map(puzzles.map((puzzle) => [puzzle.id, puzzle]));
 
@@ -24,20 +25,34 @@ function publishedAnswer(id) {
 // id/category/difficulty and a global count, never for hint length, hint
 // distinctness, explanation length, or verification shape, so a puzzle that
 // broke those rules there would have shipped with no test catching it.
-function assertPuzzleSchema(puzzle) {
+// Invariants the app actually depends on to render/score a puzzle
+// correctly -- these must hold for every puzzle, live or archived, forever.
+function assertPuzzleStructure(puzzle) {
   assert.match(puzzle.id, /^[a-z0-9-]+$/);
-  assert.ok(puzzle.title.length >= 8, `${puzzle.id}: title too short`);
-  assert.ok(puzzle.question.length >= 40, `${puzzle.id}: question too short`);
   assert.equal(puzzle.options.length, 4, `${puzzle.id}: needs 4 options`);
   assert.ok(puzzle.correctOption >= 0 && puzzle.correctOption < 4, `${puzzle.id}: correctOption out of range`);
   assert.equal(puzzle.hints.length, 3, `${puzzle.id}: needs 3 hints`);
   assert.equal(new Set(puzzle.hints).size, 3, `${puzzle.id}: hint stages must be distinct`);
+  assert.equal(puzzle.verification.reviewed, true, `${puzzle.id}: verification.reviewed must be true`);
+  assert.ok(Number.isInteger(puzzle.verification.version), `${puzzle.id}: verification.version must be an integer`);
+}
+
+// Prose-quality bar for newly authored content (see docs/PUZZLE-ROTATION.md
+// step 3). Applied on top of assertPuzzleStructure for puzzles.json and
+// launch-expansion.ts below. Deliberately NOT applied to archived cycles --
+// app/data/archive/*.ts puzzles are a frozen historical record ("do not
+// edit", per the note at the top of each archive file), so a puzzle that
+// predates a since-tightened length guideline, or falls a few characters
+// under it, isn't a bug worth reopening a "do not edit" file to fix -- only
+// assertPuzzleStructure's actual runtime invariants apply retroactively.
+function assertPuzzleSchema(puzzle) {
+  assertPuzzleStructure(puzzle);
+  assert.ok(puzzle.title.length >= 8, `${puzzle.id}: title too short`);
+  assert.ok(puzzle.question.length >= 40, `${puzzle.id}: question too short`);
   assert.ok(puzzle.hints.every((hint) => hint.length >= 30), `${puzzle.id}: hint too short`);
   assert.ok(puzzle.explanation.length >= 220, `${puzzle.id}: explanation too short`);
   assert.ok(puzzle.takeaway.length >= 50, `${puzzle.id}: takeaway too short`);
-  assert.equal(puzzle.verification.reviewed, true, `${puzzle.id}: verification.reviewed must be true`);
   assert.ok(puzzle.verification.method.length >= 12, `${puzzle.id}: verification.method too short`);
-  assert.ok(Number.isInteger(puzzle.verification.version), `${puzzle.id}: verification.version must be an integer`);
 }
 
 test("every published puzzle passes the release schema", () => {
@@ -72,6 +87,31 @@ test("launch expansion supplies thirteen original puzzles for each path, and all
 test("no puzzle id is reused between puzzles.json and launch-expansion.ts", () => {
   const expansionIds = new Set(launchExpansion.map((puzzle) => puzzle.id));
   for (const id of byId.keys()) assert.ok(!expansionIds.has(id), `id "${id}" appears in both files`);
+});
+
+// Reads app/data/archive/index.ts's own archivedCycles export rather than
+// importing a specific archive file by name (e.g. cycle-1.ts) -- every
+// cycle's puzzles must be registered there to ever be reachable by the app
+// (see docs/PUZZLE-ROTATION.md step 5.2), so walking this export instead of
+// a hardcoded filename means a *future* cycle's archive automatically gets
+// the same full schema + cross-file id-uniqueness checks as today's live
+// roster, with nothing to remember to wire up by hand each rotation.
+test("every archived cycle's puzzles pass structural validation and don't collide with the live roster or each other", () => {
+  assert.ok(archivedCycles.length >= 1, "expected at least one archived cycle");
+  assert.ok(archivedCycles.length <= 2, "retention policy keeps at most 2 archived cycles -- see docs/PUZZLE-ROTATION.md step 5.3");
+
+  const liveIds = new Set([...byId.keys(), ...launchExpansion.map((puzzle) => puzzle.id)]);
+  const seenArchiveIds = new Set();
+
+  for (const cycle of archivedCycles) {
+    assert.ok(cycle.puzzles.length > 0, `cycle ${cycle.cycleNumber}: archive has no puzzles`);
+    for (const puzzle of cycle.puzzles) {
+      assertPuzzleStructure(puzzle);
+      assert.ok(!liveIds.has(puzzle.id), `id "${puzzle.id}" in archived cycle ${cycle.cycleNumber} collides with the live roster`);
+      assert.ok(!seenArchiveIds.has(puzzle.id), `id "${puzzle.id}" is reused across archived cycles`);
+      seenArchiveIds.add(puzzle.id);
+    }
+  }
 });
 
 test("cotton outweighs gold under avoirdupois versus troy grains", () => {
