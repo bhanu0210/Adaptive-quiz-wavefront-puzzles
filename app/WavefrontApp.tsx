@@ -762,37 +762,38 @@ export default function WavefrontApp() {
     setSolvePoints((current) => ({ ...current, [activePuzzle.id]: points }));
     setMastery((current) => ({ ...current, [activePuzzle.category]: Math.min(100, (current[activePuzzle.category] ?? 0) + points) }));
     if (supabase && authUser) {
-      // Restored: an earlier change stopped writing to puzzle_progress on
-      // the assumption nothing read it anymore, based only on grepping this
-      // repo's frontend code. That assumption was wrong -- something
-      // server-side (undocumented, defined outside this repo) depended on
-      // it and removing the write broke real users' leaderboard scores/
-      // ranks even though locking (which reads puzzle_solve_scores) kept
-      // working.
-      //
-      // As of docs/supabase-leaderboard-cycle-scope.sql, puzzle_leaderboard()
-      // itself is now known to read only from puzzle_solve_scores and
-      // puzzle_daily_points -- NOT puzzle_progress -- so that specific
-      // function is no longer the reason to keep this write. But since
-      // something else server-side still might depend on puzzle_progress
-      // and no session has Supabase credentials to check, keep writing to
-      // both until that's confirmed rather than risk repeating the same
-      // regression.
-      const asResult = (promise: PromiseLike<{ error: { message?: string; code?: string } | null }>) =>
-        Promise.resolve(promise).catch((thrown): { error: { message?: string; code?: string } } => ({
-          error: { message: thrown instanceof Error ? thrown.message : String(thrown) },
-        }));
-      void Promise.all([
-        asResult(supabase.from("puzzle_progress").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, attempts: 1, hints_used: revealedHints, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" })),
-        asResult(supabase.from("puzzle_solve_scores").upsert({ user_id: authUser.id, puzzle_id: activePuzzle.id, points, solved_at: new Date().toISOString() }, { onConflict: "user_id,puzzle_id" })),
-      ]).then(([progressResult, scoreResult]) => {
-          if (progressResult.error) {
-            console.error("puzzle_progress upsert failed", progressResult.error);
-          }
-          if (scoreResult.error) {
-            console.error("puzzle_solve_scores upsert failed", scoreResult.error);
+      // Scoring is no longer decided here -- record_puzzle_solve (see
+      // docs/supabase-solve-validation.sql) independently re-checks the
+      // submitted option against puzzle_catalog's own stored correctOption
+      // and computes points itself, since the client's own `correct`/
+      // `points` above can no longer be trusted as the value actually
+      // written: docs/supabase-solve-validation.sql also revokes direct
+      // client insert/update access to puzzle_solve_scores and
+      // puzzle_progress entirely, so this RPC is now the only way either
+      // table can be written at all. selectedOption is passed raw (the
+      // actual choice made), never a pre-computed correct/points pair --
+      // sending the client's own verdict would defeat the point of moving
+      // this server-side.
+      void supabase.rpc("record_puzzle_solve", {
+        p_puzzle_id: activePuzzle.id,
+        p_chosen_option: selectedOption,
+        p_hints_used: revealedHints,
+      }).then(({ data, error }) => {
+          if (error) {
+            console.error("record_puzzle_solve failed", error);
             setSolvedIds((current) => current.filter((id) => id !== activePuzzle.id));
-            setProgressSyncNotice(`Your solve could not be saved (${scoreResult.error.message || scoreResult.error.code || "unknown error"}). Please try again.`);
+            setProgressSyncNotice(`Your solve could not be saved (${error.message || error.code || "unknown error"}). Please try again.`);
+            return;
+          }
+          const result = Array.isArray(data) ? data[0] : data;
+          if (!result?.correct) {
+            // The server disagrees that this was a correct solve (should
+            // only happen if puzzle_catalog and the bundled puzzle data
+            // have drifted apart) -- don't leave a solved/points state the
+            // database doesn't actually back.
+            setSolvedIds((current) => current.filter((id) => id !== activePuzzle.id));
+            setProgressSyncNotice("This solve couldn't be verified against the current puzzle catalog. Please try again.");
+            return;
           }
           setStreakVersion((version) => version + 1);
           setLeaderboardVersion((version) => version + 1);

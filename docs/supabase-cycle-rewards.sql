@@ -1,6 +1,18 @@
 -- Run this in your Supabase project's SQL editor, AFTER
 -- docs/supabase-schema-additions.sql has already been run.
 --
+-- UPDATE: _puzzle_require_admin and admin_register_cycle now set
+-- search_path = public, pg_temp. Without an explicit search_path, a
+-- SECURITY DEFINER function resolves unqualified names using the
+-- CALLER's search_path rather than a pinned one -- the standard Postgres
+-- privilege-escalation vector for this function type. Both bodies already
+-- qualify their own references with public., so this needed no logic
+-- changes. (admin_reset_cycle_leaderboard, defined further down, gets the
+-- same treatment in docs/supabase-leaderboard-cycle-scope.sql instead,
+-- since that file already redefines it for the self-close guard --
+-- whichever of these two files runs second is the one that "wins" and
+-- both leave it correctly hardened either way.)
+--
 -- IMPORTANT: This has been exercised against a local PostgreSQL stub of
 -- Supabase's auth schema (matching the exact column names/shapes already
 -- used by app/WavefrontApp.tsx: puzzle_solve_scores, puzzle_daily_points,
@@ -118,6 +130,7 @@ create or replace function public._puzzle_require_admin()
 returns void
 language plpgsql
 security definer
+set search_path = public, pg_temp
 as $$
 begin
   if coalesce(auth.jwt() ->> 'email', '') <> 'cbaforcat2017@gmail.com' then
@@ -137,6 +150,7 @@ create or replace function public.admin_register_cycle(
 returns void
 language plpgsql
 security definer
+set search_path = public, pg_temp
 as $$
 #variable_conflict use_column
 begin
