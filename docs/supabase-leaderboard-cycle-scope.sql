@@ -1,6 +1,20 @@
 -- Run this in your Supabase project's SQL editor, AFTER
 -- docs/supabase-cycle-rewards.sql has already been run.
 --
+-- UPDATE: both SECURITY DEFINER functions this file (re)defines --
+-- admin_reset_cycle_leaderboard and puzzle_leaderboard -- now also set
+-- search_path = public, pg_temp. Without an explicit search_path, a
+-- SECURITY DEFINER function resolves unqualified names using whatever
+-- search_path the CALLER happens to have, which is the standard Postgres
+-- privilege-escalation vector for this function type: a caller able to
+-- create objects in a schema earlier in their own search_path could get
+-- the function to silently resolve to an object they control instead of
+-- the real public.* one, and since the function runs with the definer's
+-- elevated privileges, that substitution runs elevated too. Every function
+-- body here already qualifies its own table references with public., so
+-- fixing this needed no logic changes -- just pinning the resolution path
+-- itself.
+--
 -- ============================================================
 -- THE GAP THIS CLOSES
 -- ============================================================
@@ -153,6 +167,7 @@ returns table (
 )
 language plpgsql
 security definer
+set search_path = public, pg_temp
 as $$
 #variable_conflict use_column
 declare
@@ -309,6 +324,7 @@ returns table (
 language plpgsql
 stable
 security definer
+set search_path = public, pg_temp
 as $$
 declare
   v_open_cycle integer;
