@@ -50,6 +50,7 @@ type CycleSubmission = {
 type CommunityComment = { id: string; post_id: string; user_id: string; author_name: string; body: string; created_at: string };
 type CycleRewardResult = { user_id: string; rank: number; score: number; was_subscribed: boolean; weekly_days_granted: number; streak_after: number; streak_milestone_days_granted: number };
 type RealLeader = { user_id: string; display_name: string; score: number; solved_count: number };
+type HallOfFamer = { user_id: string; display_name: string; best_rank: number; top10_appearances: number; most_recent_cycle: number; best_score: number };
 type AdminFeedback = { id: string; user_id: string; puzzle_id: string; issue_type: string; rating: number | null; note: string; created_at: string };
 
 const accessPasses: Record<AccessPass, { name: string; price: string; duration: string; description: string }> = {
@@ -255,6 +256,7 @@ export default function WavefrontApp() {
   const [weeklyChangePct, setWeeklyChangePct] = useState<number | null>(null);
   const [realLeaders, setRealLeaders] = useState<RealLeader[]>([]);
   const [leaderboardVersion, setLeaderboardVersion] = useState(0);
+  const [hallOfFame, setHallOfFame] = useState<HallOfFamer[]>([]);
 
   useEffect(() => {
     if (!supabase) {
@@ -477,6 +479,11 @@ export default function WavefrontApp() {
     if (!supabase) return;
     void supabase.rpc("puzzle_leaderboard").then(({ data }) => setRealLeaders((data ?? []) as RealLeader[]));
   }, [authUser?.id, leaderboardVersion, dailyPointsVersion]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    void supabase.rpc("puzzle_hall_of_fame").then(({ data }) => setHallOfFame((data ?? []) as HallOfFamer[]));
+  }, [leaderboardVersion]);
 
   const fallbackAdminRecord = (puzzle: Puzzle): AdminPuzzle => ({
     id: puzzle.id, title: puzzle.title, path: categoryToPath[puzzle.category as (typeof categories)[number]["name"]],
@@ -786,7 +793,6 @@ export default function WavefrontApp() {
       return;
     }
     if (solvedIds.includes(activePuzzle.id)) return;
-    const points = wrongOnceIds.includes(activePuzzle.id) ? 0 : Math.max(40, 100 - revealedHints * 15);
     setSolvedIds((current) => [...current, activePuzzle.id]);
     if (supabase && authUser) {
       // Scoring is no longer decided here -- record_puzzle_solve (see
@@ -1348,6 +1354,7 @@ export default function WavefrontApp() {
                   );
                 })}
                 <div className="hint-cost"><span>Hint-adjusted score</span><strong>{Math.max(40, 100 - revealedHints * 15)} pts</strong></div>
+                <p className="hint-explainer">Each hint costs 15 points off this solve (floor 40), but it never lowers your adaptive level — a hinted correct answer just holds your level steady instead of advancing it, it doesn&apos;t push you back down.</p>
               </aside>
             </div>
           </section>
@@ -1485,6 +1492,21 @@ export default function WavefrontApp() {
                 </div>
               ))}
             </div>
+            {hallOfFame.length > 0 && (
+              <div className="hall-of-fame">
+                <div className="page-heading"><div><span className="eyebrow">Permanent record</span><h2>Hall of Fame</h2><p>Everyone who has ever finished a closed cycle in the top 10 — this list never resets.</p></div></div>
+                <div className="leader-table hall-of-fame-table">
+                  <div className="leader-head"><span>Best rank</span><span>Solver</span><span>Top-10 finishes</span><span>Last seen</span><span>Best score</span></div>
+                  {hallOfFame.map((entry) => (
+                    <div className="leader-row" key={entry.user_id}>
+                      <strong>#{entry.best_rank}</strong>
+                      <span className="leader-person"><span>{entry.display_name.slice(0, 2).toUpperCase()}</span><strong>{entry.display_name}</strong></span>
+                      <span>{entry.top10_appearances}</span><span>Cycle {entry.most_recent_cycle}</span><strong>{entry.best_score.toLocaleString()}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <details className="rules-disclosure">
               <summary>How scoring &amp; rewards work</summary>
               <div className="rules-disclosure-body">
@@ -1493,12 +1515,20 @@ export default function WavefrontApp() {
                   <p>Your score for Cycle {currentCycle.cycleNumber} is Daily puzzle points plus every correct solve from this cycle&apos;s current 90-puzzle roster. Daily easy, moderate, and tough prompts award 20, 50, and 100 points, once each per day. Puzzles from a retired, archived cycle never add to a live cycle&apos;s score.</p>
                 </div>
                 <div>
+                  <span>Hints</span>
+                  <p>Each hint you reveal on a puzzle costs 15 points off that solve&apos;s score (100 → 85 → 70 → 55, floor 40) — but hints only affect points, never your adaptive level. A clean correct answer with no hints advances your level for that category; a correct answer using any hints holds your level steady; only a wrong answer drops it. Using a hint never demotes you.</p>
+                </div>
+                <div>
                   <span>Weekly reward</span>
                   <p>When a cycle closes, the top 10 solvers who hold an active pass at that moment each get +7 days of access, stacked on top of whatever access they already have. Ranking well without an active pass earns a spot on the board, not the reward.</p>
                 </div>
                 <div>
                   <span>Long-streak bonus</span>
                   <p>Land in the top 10 for 6 cycles in a row (while subscribed each time) and you get +1 year of access on top of the weekly rewards already earned. Miss the top 10, or let your pass lapse for a cycle, and the streak resets — the next bonus after that then needs 12 cycles in a row, then 18, and so on.</p>
+                </div>
+                <div>
+                  <span>Hall of Fame</span>
+                  <p>Anyone who ever finishes a closed cycle ranked in the top 10 is recorded permanently, whether or not they were subscribed — it&apos;s a recognition record, separate from the reward eligibility above. The live leaderboard resets scope to the current cycle, but the Hall of Fame never resets.</p>
                 </div>
               </div>
               <p className="rules-disclosure-foot">Rewards apply only to subscribers with an active pass when a cycle closes. A fresh 90-puzzle roster rotates in every two weeks.</p>
