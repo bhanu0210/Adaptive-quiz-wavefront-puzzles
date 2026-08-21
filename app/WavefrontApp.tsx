@@ -194,7 +194,6 @@ export default function WavefrontApp() {
   const [checkoutNotice, setCheckoutNotice] = useState("");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [accessUntil, setAccessUntil] = useState<string | null>(null);
-  const [expiryNotice, setExpiryNotice] = useState<1 | 2 | null>(null);
   const [rating, setRating] = useState<number | null>(null);
   const [feedbackType, setFeedbackType] = useState<FeedbackKind>("general");
   const [feedbackNote, setFeedbackNote] = useState("");
@@ -224,7 +223,11 @@ export default function WavefrontApp() {
   const [cycleSubmitNotice, setCycleSubmitNotice] = useState("");
   const [adminCycleSubmissions, setAdminCycleSubmissions] = useState<CycleSubmission[]>([]);
   const [authUser, setAuthUser] = useState<User | null>(null);
-  const [authReady, setAuthReady] = useState(false);
+  // supabase is a stable module-level singleton, so "there's no client to
+  // wait on" is knowable at mount time -- initializing from it directly
+  // avoids a synchronous setState in the effect below just to cover that
+  // case.
+  const [authReady, setAuthReady] = useState(() => !supabase);
   const [showAuth, setShowAuth] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
   const [authCode, setAuthCode] = useState("");
@@ -259,10 +262,7 @@ export default function WavefrontApp() {
   const [hallOfFame, setHallOfFame] = useState<HallOfFamer[]>([]);
 
   useEffect(() => {
-    if (!supabase) {
-      setAuthReady(true);
-      return;
-    }
+    if (!supabase) return;
 
     let active = true;
     void supabase.auth.getSession().then(({ data }) => {
@@ -283,13 +283,14 @@ export default function WavefrontApp() {
   }, []);
 
   useEffect(() => {
-    if (!supabase || !authUser) {
-      setAccessUntil(null);
-      return;
-    }
-    void supabase.from("puzzle_subscriptions").select("current_period_end, status").eq("user_id", authUser.id).maybeSingle().then(({ data }) => {
+    void (async () => {
+      if (!supabase || !authUser) {
+        setAccessUntil(null);
+        return;
+      }
+      const { data } = await supabase.from("puzzle_subscriptions").select("current_period_end, status").eq("user_id", authUser.id).maybeSingle();
       setAccessUntil(data?.status === "active" ? data.current_period_end : null);
-    });
+    })();
   }, [authUser]);
 
   useEffect(() => {
@@ -311,8 +312,8 @@ export default function WavefrontApp() {
 
   useEffect(() => {
     if (!supabase) return;
-    setPostsLoading(true);
     void (async () => {
+      setPostsLoading(true);
       try {
         const { data } = await supabase
           .from("puzzle_community_posts")
@@ -363,116 +364,121 @@ export default function WavefrontApp() {
   const isAdmin = authUser?.email?.toLowerCase() === "cbaforcat2017@gmail.com";
   const hasActivePass = isAdmin || Boolean(accessUntil && new Date(accessUntil).getTime() > now);
 
-  useEffect(() => {
-    if (isAdmin || !accessUntil) {
-      setExpiryNotice(null);
-      return;
-    }
-    const daysRemaining = (new Date(accessUntil).getTime() - Date.now()) / (24 * 60 * 60 * 1000);
-    if (daysRemaining > 0 && daysRemaining <= 1) setExpiryNotice(1);
-    else if (daysRemaining > 1 && daysRemaining <= 2) setExpiryNotice(2);
-    else setExpiryNotice(null);
-  }, [accessUntil, isAdmin]);
+  const expiryNotice = useMemo<1 | 2 | null>(() => {
+    if (isAdmin || !accessUntil) return null;
+    const daysRemaining = (new Date(accessUntil).getTime() - now) / (24 * 60 * 60 * 1000);
+    if (daysRemaining > 0 && daysRemaining <= 1) return 1;
+    if (daysRemaining > 1 && daysRemaining <= 2) return 2;
+    return null;
+  }, [accessUntil, isAdmin, now]);
+  // Which tier the visitor already dismissed, so closing the "expires in 2
+  // days" modal doesn't also suppress tomorrow's "expires tomorrow" one --
+  // a plain event-driven value, no effect needed to keep it in sync.
+  const [dismissedExpiryTier, setDismissedExpiryTier] = useState<1 | 2 | null>(null);
+  const visibleExpiryNotice = expiryNotice !== null && expiryNotice !== dismissedExpiryTier ? expiryNotice : null;
 
   useEffect(() => {
-    if (!supabase || !authUser) {
-      setStreakDays(0);
-      return;
-    }
-    void supabase.from("puzzle_solve_scores").select("solved_at").eq("user_id", authUser.id).not("solved_at", "is", null)
-      .then(({ data }) => setStreakDays(calculateStreak((data ?? []).flatMap((row) => row.solved_at ? [row.solved_at] : []))));
+    void (async () => {
+      if (!supabase || !authUser) {
+        setStreakDays(0);
+        return;
+      }
+      const { data } = await supabase.from("puzzle_solve_scores").select("solved_at").eq("user_id", authUser.id).not("solved_at", "is", null);
+      setStreakDays(calculateStreak((data ?? []).flatMap((row) => row.solved_at ? [row.solved_at] : [])));
+    })();
   }, [authUser?.id, streakVersion]);
 
   useEffect(() => {
-    if (!supabase || !authUser) {
-      setSolvedIds([]);
-      setSolvedLoadNotice("");
-      return;
-    }
-    void supabase.from("puzzle_solve_scores").select("puzzle_id").eq("user_id", authUser.id)
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("puzzle_solve_scores load failed", error);
-          setSolvedLoadNotice(`Your solved puzzles could not be loaded (${error.message || error.code || "unknown error"}). Previously solved puzzles may look unsolved until this is fixed.`);
-          return;
-        }
+    void (async () => {
+      if (!supabase || !authUser) {
+        setSolvedIds([]);
         setSolvedLoadNotice("");
-        // Merge rather than replace, and only load once per sign-in (not on
-        // every streakVersion bump): solving already updates solvedIds
-        // locally in real time, and re-fetching after every solve let two
-        // overlapping requests resolve out of order, letting a slower,
-        // stale response wipe out a puzzle solved moments earlier.
-        const loaded = (data ?? []).map((row) => row.puzzle_id as string);
-        setSolvedIds((current) => Array.from(new Set([...current, ...loaded])));
-      });
+        return;
+      }
+      const { data, error } = await supabase.from("puzzle_solve_scores").select("puzzle_id").eq("user_id", authUser.id);
+      if (error) {
+        console.error("puzzle_solve_scores load failed", error);
+        setSolvedLoadNotice(`Your solved puzzles could not be loaded (${error.message || error.code || "unknown error"}). Previously solved puzzles may look unsolved until this is fixed.`);
+        return;
+      }
+      setSolvedLoadNotice("");
+      // Merge rather than replace, and only load once per sign-in (not on
+      // every streakVersion bump): solving already updates solvedIds
+      // locally in real time, and re-fetching after every solve let two
+      // overlapping requests resolve out of order, letting a slower,
+      // stale response wipe out a puzzle solved moments earlier.
+      const loaded = (data ?? []).map((row) => row.puzzle_id as string);
+      setSolvedIds((current) => Array.from(new Set([...current, ...loaded])));
+    })();
   }, [authUser?.id]);
 
   useEffect(() => {
-    if (!supabase || !authUser) {
-      setTrialViewedIds([]);
-      return;
-    }
-    void supabase.from("puzzle_trial_views").select("puzzle_id").eq("user_id", authUser.id)
-      .then(({ data, error }) => {
-        if (error) { console.error("puzzle_trial_views load failed", error); return; }
-        const loaded = (data ?? []).map((row) => row.puzzle_id as string);
-        setTrialViewedIds((current) => Array.from(new Set([...current, ...loaded])));
-      });
+    void (async () => {
+      if (!supabase || !authUser) {
+        setTrialViewedIds([]);
+        return;
+      }
+      const { data, error } = await supabase.from("puzzle_trial_views").select("puzzle_id").eq("user_id", authUser.id);
+      if (error) { console.error("puzzle_trial_views load failed", error); return; }
+      const loaded = (data ?? []).map((row) => row.puzzle_id as string);
+      setTrialViewedIds((current) => Array.from(new Set([...current, ...loaded])));
+    })();
   }, [authUser?.id]);
 
   useEffect(() => {
-    if (!supabase || !authUser) {
-      setWrongOnceIds([]);
-      return;
-    }
-    void supabase.from("puzzle_wrong_attempts").select("puzzle_id").eq("user_id", authUser.id)
-      .then(({ data, error }) => {
-        if (error) { console.error("puzzle_wrong_attempts load failed", error); return; }
-        const loaded = (data ?? []).map((row) => row.puzzle_id as string);
-        setWrongOnceIds((current) => Array.from(new Set([...current, ...loaded])));
-      });
+    void (async () => {
+      if (!supabase || !authUser) {
+        setWrongOnceIds([]);
+        return;
+      }
+      const { data, error } = await supabase.from("puzzle_wrong_attempts").select("puzzle_id").eq("user_id", authUser.id);
+      if (error) { console.error("puzzle_wrong_attempts load failed", error); return; }
+      const loaded = (data ?? []).map((row) => row.puzzle_id as string);
+      setWrongOnceIds((current) => Array.from(new Set([...current, ...loaded])));
+    })();
   }, [authUser?.id]);
 
   useEffect(() => {
-    if (!supabase || !authUser) {
-      setWeeklyActivity(buildEmptyWeek());
-      setWeeklyChangePct(null);
-      return;
-    }
-    void supabase.from("puzzle_solve_scores").select("solved_at").eq("user_id", authUser.id).not("solved_at", "is", null)
-      .then(({ data }) => {
-        const solvedKeys = (data ?? []).flatMap((row) => (row.solved_at ? [indiaDateKey(row.solved_at)] : []));
-        const dayAt = (daysAgo: number) => new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
-        const dayKey = (daysAgo: number) => indiaDateKey(dayAt(daysAgo));
-        const dayLabel = (daysAgo: number) => new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", weekday: "narrow" }).format(dayAt(daysAgo));
-        const thisWeek = Array.from({ length: 7 }, (_, index) => {
-          const daysAgo = 6 - index;
-          const key = dayKey(daysAgo);
-          return { label: dayLabel(daysAgo), count: solvedKeys.filter((solved) => solved === key).length };
-        });
-        setWeeklyActivity(thisWeek);
-        const priorWeekTotal = Array.from({ length: 7 }, (_, index) => dayKey(13 - index))
-          .reduce((total, key) => total + solvedKeys.filter((solved) => solved === key).length, 0);
-        const thisWeekTotal = thisWeek.reduce((total, day) => total + day.count, 0);
-        setWeeklyChangePct(priorWeekTotal > 0 ? Math.round(((thisWeekTotal - priorWeekTotal) / priorWeekTotal) * 100) : null);
+    void (async () => {
+      if (!supabase || !authUser) {
+        setWeeklyActivity(buildEmptyWeek());
+        setWeeklyChangePct(null);
+        return;
+      }
+      const { data } = await supabase.from("puzzle_solve_scores").select("solved_at").eq("user_id", authUser.id).not("solved_at", "is", null);
+      const solvedKeys = (data ?? []).flatMap((row) => (row.solved_at ? [indiaDateKey(row.solved_at)] : []));
+      const dayAt = (daysAgo: number) => new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
+      const dayKey = (daysAgo: number) => indiaDateKey(dayAt(daysAgo));
+      const dayLabel = (daysAgo: number) => new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", weekday: "narrow" }).format(dayAt(daysAgo));
+      const thisWeek = Array.from({ length: 7 }, (_, index) => {
+        const daysAgo = 6 - index;
+        const key = dayKey(daysAgo);
+        return { label: dayLabel(daysAgo), count: solvedKeys.filter((solved) => solved === key).length };
       });
+      setWeeklyActivity(thisWeek);
+      const priorWeekTotal = Array.from({ length: 7 }, (_, index) => dayKey(13 - index))
+        .reduce((total, key) => total + solvedKeys.filter((solved) => solved === key).length, 0);
+      const thisWeekTotal = thisWeek.reduce((total, day) => total + day.count, 0);
+      setWeeklyChangePct(priorWeekTotal > 0 ? Math.round(((thisWeekTotal - priorWeekTotal) / priorWeekTotal) * 100) : null);
+    })();
   }, [authUser?.id, streakVersion]);
 
   useEffect(() => {
-    if (!supabase || !authUser) {
-      setDailySolved({});
-      setDailyAttempted({});
-      return;
-    }
-    void Promise.all([
-      supabase.from("puzzle_daily_points").select("puzzle_date,difficulty,points").eq("user_id", authUser.id),
-      supabase.from("puzzle_daily_attempts").select("puzzle_date,difficulty").eq("user_id", authUser.id),
-    ]).then(([pointsResult, attemptsResult]) => {
+    void (async () => {
+      if (!supabase || !authUser) {
+        setDailySolved({});
+        setDailyAttempted({});
+        return;
+      }
+      const [pointsResult, attemptsResult] = await Promise.all([
+        supabase.from("puzzle_daily_points").select("puzzle_date,difficulty,points").eq("user_id", authUser.id),
+        supabase.from("puzzle_daily_attempts").select("puzzle_date,difficulty").eq("user_id", authUser.id),
+      ]);
       const rows = pointsResult.data ?? [];
       const today = indiaDateKey(new Date());
       setDailySolved(Object.fromEntries(rows.filter((row) => row.puzzle_date === today).map((row) => [row.difficulty, true])));
       setDailyAttempted(Object.fromEntries((attemptsResult.data ?? []).filter((row) => row.puzzle_date === today).map((row) => [row.difficulty, true])));
-    });
+    })();
   }, [authUser?.id, dailyPointsVersion]);
 
   useEffect(() => {
@@ -523,7 +529,11 @@ export default function WavefrontApp() {
     setAdminLoading(false);
   };
 
-  useEffect(() => { void loadAdminData(); }, [authUser?.id]);
+  useEffect(() => {
+    void (async () => {
+      await loadAdminData();
+    })();
+  }, [authUser?.id]);
 
   const deleteFeedback = async (id: string) => {
     if (!supabase) return;
@@ -1797,14 +1807,14 @@ export default function WavefrontApp() {
         ))}
       </nav>
 
-      {expiryNotice && !showSubscribe && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setExpiryNotice(null)}>
+      {visibleExpiryNotice && !showSubscribe && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setDismissedExpiryTier(expiryNotice)}>
           <section className="subscribe-modal expiry-modal" role="dialog" aria-modal="true" aria-labelledby="expiry-title" onMouseDown={(event) => event.stopPropagation()}>
-            <button className="modal-close" aria-label="Close" onClick={() => setExpiryNotice(null)}>×</button>
+            <button className="modal-close" aria-label="Close" onClick={() => setDismissedExpiryTier(expiryNotice)}>×</button>
             <AppMark /><span className="expiry-badge">Pass expiring</span>
-            <h2 id="expiry-title">{expiryNotice === 1 ? "Your pass expires tomorrow." : "Your pass expires in 2 days."}</h2>
+            <h2 id="expiry-title">{visibleExpiryNotice === 1 ? "Your pass expires tomorrow." : "Your pass expires in 2 days."}</h2>
             <p>Renew now to keep uninterrupted access to every adaptive path, the fortnightly puzzle drops, and community rankings.</p>
-            <button className="checkout-button" onClick={() => { setExpiryNotice(null); setShowSubscribe(true); }}>Renew access <span aria-hidden="true">→</span></button>
+            <button className="checkout-button" onClick={() => { setDismissedExpiryTier(expiryNotice); setShowSubscribe(true); }}>Renew access <span aria-hidden="true">→</span></button>
           </section>
         </div>
       )}
