@@ -9,6 +9,7 @@ const launchExpansionSource = await readFile(
   new URL("../app/data/launch-expansion.ts", import.meta.url),
   "utf8",
 );
+const { launchExpansion } = await import("../app/data/launch-expansion.ts");
 
 const byId = new Map(puzzles.map((puzzle) => [puzzle.id, puzzle]));
 
@@ -17,28 +18,35 @@ function publishedAnswer(id) {
   return puzzle.options[puzzle.correctOption];
 }
 
+// Shared with both puzzles.json (12) and launch-expansion.ts (78) below, so
+// every one of the 90 live puzzles gets the same full-field validation --
+// previously the 78 in launch-expansion.ts were only checked by regex for
+// id/category/difficulty and a global count, never for hint length, hint
+// distinctness, explanation length, or verification shape, so a puzzle that
+// broke those rules there would have shipped with no test catching it.
+function assertPuzzleSchema(puzzle) {
+  assert.match(puzzle.id, /^[a-z0-9-]+$/);
+  assert.ok(puzzle.title.length >= 8, `${puzzle.id}: title too short`);
+  assert.ok(puzzle.question.length >= 40, `${puzzle.id}: question too short`);
+  assert.equal(puzzle.options.length, 4, `${puzzle.id}: needs 4 options`);
+  assert.ok(puzzle.correctOption >= 0 && puzzle.correctOption < 4, `${puzzle.id}: correctOption out of range`);
+  assert.equal(puzzle.hints.length, 3, `${puzzle.id}: needs 3 hints`);
+  assert.equal(new Set(puzzle.hints).size, 3, `${puzzle.id}: hint stages must be distinct`);
+  assert.ok(puzzle.hints.every((hint) => hint.length >= 30), `${puzzle.id}: hint too short`);
+  assert.ok(puzzle.explanation.length >= 220, `${puzzle.id}: explanation too short`);
+  assert.ok(puzzle.takeaway.length >= 50, `${puzzle.id}: takeaway too short`);
+  assert.equal(puzzle.verification.reviewed, true, `${puzzle.id}: verification.reviewed must be true`);
+  assert.ok(puzzle.verification.method.length >= 12, `${puzzle.id}: verification.method too short`);
+  assert.ok(Number.isInteger(puzzle.verification.version), `${puzzle.id}: verification.version must be an integer`);
+}
+
 test("every published puzzle passes the release schema", () => {
   assert.equal(puzzles.length, 12);
   assert.equal(byId.size, puzzles.length, "puzzle ids must be unique");
-
-  for (const puzzle of puzzles) {
-    assert.match(puzzle.id, /^[a-z0-9-]+$/);
-    assert.ok(puzzle.title.length >= 8);
-    assert.ok(puzzle.question.length >= 40);
-    assert.equal(puzzle.options.length, 4);
-    assert.ok(puzzle.correctOption >= 0 && puzzle.correctOption < 4);
-    assert.equal(puzzle.hints.length, 3);
-    assert.equal(new Set(puzzle.hints).size, 3, "hint stages must be distinct");
-    assert.ok(puzzle.hints.every((hint) => hint.length >= 30));
-    assert.ok(puzzle.explanation.length >= 220);
-    assert.ok(puzzle.takeaway.length >= 50);
-    assert.equal(puzzle.verification.reviewed, true);
-    assert.ok(puzzle.verification.method.length >= 12);
-    assert.ok(Number.isInteger(puzzle.verification.version));
-  }
+  for (const puzzle of puzzles) assertPuzzleSchema(puzzle);
 });
 
-test("launch expansion supplies thirteen original puzzles for each path", () => {
+test("launch expansion supplies thirteen original puzzles for each path, and all pass the release schema", () => {
   const records = [...launchExpansionSource.matchAll(/id: "([a-z0-9-]+)", title: "[^"]+", category: "([^"]+)", difficulty: ([1-5])/g)];
   assert.equal(records.length, 78);
   assert.equal(new Set(records.map((record) => record[1])).size, 78, "launch ids must be unique");
@@ -56,6 +64,14 @@ test("launch expansion supplies thirteen original puzzles for each path", () => 
 
   assert.ok(records.filter((record) => Number(record[3]) >= 4).length >= 5, "the expansion needs expert checkpoints");
   assert.ok(!launchExpansionSource.includes("reference: \""), "expansion must not publish copied source references");
+
+  assert.equal(launchExpansion.length, 78, "the parsed export must match the regex-counted source");
+  for (const puzzle of launchExpansion) assertPuzzleSchema(puzzle);
+});
+
+test("no puzzle id is reused between puzzles.json and launch-expansion.ts", () => {
+  const expansionIds = new Set(launchExpansion.map((puzzle) => puzzle.id));
+  for (const id of byId.keys()) assert.ok(!expansionIds.has(id), `id "${id}" appears in both files`);
 });
 
 test("cotton outweighs gold under avoirdupois versus troy grains", () => {

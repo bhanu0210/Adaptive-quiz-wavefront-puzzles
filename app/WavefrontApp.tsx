@@ -6,11 +6,16 @@ import puzzlesData from "./data/puzzles.json";
 import { launchExpansion } from "./data/launch-expansion";
 import { supabase } from "./supabase";
 import { currentCycle, daysUntilNextRotation, rotationProgress } from "./data/cycle-meta";
-import { archivedCycles } from "./data/archive";
+import { archivedCycles, type ArchivedPuzzle } from "./data/archive";
 import { learningTips } from "./data/tips";
 
 const launchPuzzles = [...puzzlesData, ...launchExpansion];
 type Puzzle = (typeof launchPuzzles)[number];
+// An archived puzzle has the same shape as a live one (see the ArchivedPuzzle
+// type) -- solving/rendering code accepts either rather than pretending an
+// archived puzzle IS a live Puzzle via an unchecked cast, which would happily
+// compile even if the two shapes ever drifted apart.
+type SolvablePuzzle = Puzzle | ArchivedPuzzle;
 type View = "solve" | "daily" | "paths" | "tips" | "leaderboard" | "community" | "archive" | "feedback" | "admin";
 type AccessPass = "monthly" | "annual";
 type DailyBrief = {
@@ -170,13 +175,12 @@ function TipIcon({ code, color }: { code: string; color: string }) {
 
 export default function WavefrontApp() {
   const [view, setView] = useState<View>("solve");
-  const [activePuzzle, setActivePuzzle] = useState<Puzzle | null>(null);
+  const [activePuzzle, setActivePuzzle] = useState<SolvablePuzzle | null>(null);
   const [activePuzzleLabel, setActivePuzzleLabel] = useState("");
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [revealedHints, setRevealedHints] = useState(0);
   const [solvedIds, setSolvedIds] = useState<string[]>([]);
-  const [solvePoints, setSolvePoints] = useState<Record<string, number>>({});
   const [progressSyncNotice, setProgressSyncNotice] = useState("");
   const [solvedLoadNotice, setSolvedLoadNotice] = useState("");
   const [trialViewedIds, setTrialViewedIds] = useState<string[]>([]);
@@ -184,9 +188,6 @@ export default function WavefrontApp() {
   const [wrongOnceIds, setWrongOnceIds] = useState<string[]>([]);
   const [adaptiveLevels, setAdaptiveLevels] = useState<Record<string, number>>(Object.fromEntries(categories.map((category) => [category.name, 1])));
   const [difficultyRatings, setDifficultyRatings] = useState<Record<string, { avg: number; count: number }>>({});
-  const [mastery, setMastery] = useState<Record<string, number>>(
-    Object.fromEntries(categories.map((category) => [category.name, 0])),
-  );
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [selectedPass, setSelectedPass] = useState<AccessPass>("monthly");
   const [checkoutNotice, setCheckoutNotice] = useState("");
@@ -247,7 +248,6 @@ export default function WavefrontApp() {
   const [dailySolved, setDailySolved] = useState<Record<string, boolean>>({});
   const [dailyAttempted, setDailyAttempted] = useState<Record<string, boolean>>({});
   const [dailyChecking, setDailyChecking] = useState<string | null>(null);
-  const [dailyPoints, setDailyPoints] = useState(0);
   const [dailyPointsVersion, setDailyPointsVersion] = useState(0);
   const [streakDays, setStreakDays] = useState(0);
   const [streakVersion, setStreakVersion] = useState(0);
@@ -344,8 +344,22 @@ export default function WavefrontApp() {
 
   const livePuzzles = useMemo(() => launchPuzzles.map((puzzle) => ({ ...puzzle, ...(contentOverrides[puzzle.id] ?? {}) })), [contentOverrides]);
 
+  // "Is the pass still active" depends on the current time, which is not a
+  // pure render input -- Date.now() called directly during render can go
+  // stale until some unrelated state change happens to trigger a re-render.
+  // Mirroring it into real React state (ticking once a minute, which is
+  // plenty for an expiry check) makes every "is my access still active"
+  // check below a pure function of props/state, and guarantees the pass
+  // actually flips to expired in the UI within a minute of expiring, rather
+  // than only whenever something else happens to re-render the page.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   const isAdmin = authUser?.email?.toLowerCase() === "cbaforcat2017@gmail.com";
-  const hasActivePass = isAdmin || Boolean(accessUntil && new Date(accessUntil).getTime() > Date.now());
+  const hasActivePass = isAdmin || Boolean(accessUntil && new Date(accessUntil).getTime() > now);
 
   useEffect(() => {
     if (isAdmin || !accessUntil) {
@@ -444,7 +458,6 @@ export default function WavefrontApp() {
 
   useEffect(() => {
     if (!supabase || !authUser) {
-      setDailyPoints(0);
       setDailySolved({});
       setDailyAttempted({});
       return;
@@ -455,7 +468,6 @@ export default function WavefrontApp() {
     ]).then(([pointsResult, attemptsResult]) => {
       const rows = pointsResult.data ?? [];
       const today = indiaDateKey(new Date());
-      setDailyPoints(rows.reduce((total, row) => total + Number(row.points ?? 0), 0));
       setDailySolved(Object.fromEntries(rows.filter((row) => row.puzzle_date === today).map((row) => [row.difficulty, true])));
       setDailyAttempted(Object.fromEntries((attemptsResult.data ?? []).filter((row) => row.puzzle_date === today).map((row) => [row.difficulty, true])));
     });
@@ -562,17 +574,6 @@ export default function WavefrontApp() {
     }
   };
 
-  const setAdminPublication = async (puzzle: AdminPuzzle, publication_status: "draft" | "published") => {
-    if (!supabase) return;
-    const { error } = await supabase.from("puzzle_catalog").upsert({
-      id: puzzle.id, title: puzzle.title, path: puzzle.path, difficulty: puzzle.difficulty,
-      expected_minutes: puzzle.expected_minutes, access_level: puzzle.access_level, payload: puzzle.payload,
-      publication_status, published_at: publication_status === "published" ? new Date().toISOString() : null,
-    }, { onConflict: "id" });
-    setAdminNotice(error ? "The publication status could not be updated." : `${puzzle.title} is now ${publication_status}.`);
-    if (!error) await loadAdminData();
-  };
-
   const syncLaunchCatalog = async () => {
     if (!supabase) return;
     setAdminLoading(true);
@@ -660,6 +661,20 @@ export default function WavefrontApp() {
     return choices.sort((a, b) => Math.abs(effectiveDifficultyById[a.id] - target) - Math.abs(effectiveDifficultyById[b.id] - target))[0] ?? livePuzzles[0];
   }, [livePuzzles, solvedIds, attemptedIds, wrongOnceIds, nextAdaptiveCategory, adaptiveLevels, effectiveDifficultyById]);
 
+  // Mastery is the real share of a path actually solved, not an accumulation
+  // of points capped at 100 -- the old version showed "100% mastery" after
+  // just one or two solves in a 15-puzzle path, which told a solver nothing
+  // true about how much of the path they'd actually covered.
+  const mastery = useMemo(() => {
+    const result: Record<string, number> = {};
+    for (const category of categories) {
+      const totalInPath = livePuzzles.filter((puzzle) => puzzle.category === category.name).length;
+      const solvedInPath = livePuzzles.filter((puzzle) => puzzle.category === category.name && solvedIds.includes(puzzle.id)).length;
+      result[category.name] = totalInPath === 0 ? 0 : Math.round((solvedInPath / totalInPath) * 100);
+    }
+    return result;
+  }, [livePuzzles, solvedIds]);
+
   const freeTrialUsedByCategory = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const puzzle of livePuzzles) {
@@ -700,7 +715,7 @@ export default function WavefrontApp() {
     return ids;
   }, [livePuzzles]);
 
-  const startPuzzle = (puzzle: Puzzle, label?: string) => {
+  const startPuzzle = (puzzle: SolvablePuzzle, label?: string) => {
     if (!authUser && !guestPreviewIds.includes(puzzle.id)) {
       setAuthMessage(`Sign in to try ${FREE_TRIAL_SOLVES_PER_CATEGORY} free questions in every path.`);
       setShowAuth(true);
@@ -734,8 +749,22 @@ export default function WavefrontApp() {
     setSubmitted(true);
     const correct = selectedOption === activePuzzle.correctOption;
     const category = activePuzzle.category as (typeof categories)[number]["name"];
-    const solvedDifficulty = effectiveDifficultyById[activePuzzle.id] ?? activePuzzle.difficulty;
-    const nextDifficulty = correct && revealedHints === 0 ? Math.min(5, solvedDifficulty + 1) : Math.max(1, solvedDifficulty - 1);
+    // Adaptive level moves relative to the solver's OWN current level, never
+    // the puzzle's difficulty -- hand-picking an easy puzzle from Paths while
+    // at level 5 must not demote you to level 2 just because the puzzle was
+    // authored as difficulty 1. A wrong answer always drops one level. A
+    // clean correct answer (no hints) always advances one level. Using the
+    // hint ladder holds the level steady rather than demoting: the puzzle was
+    // still genuinely solved, and every puzzle in the roster ships a 3-step
+    // hint ladder by design, so treating "used a hint" the same as "got it
+    // wrong" would quietly punish solvers for using a built-in feature and
+    // keep them stuck below the difficulty tiers the hints exist to unlock.
+    const currentLevel = adaptiveLevels[category] ?? 1;
+    const nextDifficulty = !correct
+      ? Math.max(1, currentLevel - 1)
+      : revealedHints === 0
+        ? Math.min(5, currentLevel + 1)
+        : currentLevel;
     setAdaptiveLevels((current) => ({ ...current, [category]: nextDifficulty }));
     setAttemptedIds((current) => current.includes(activePuzzle.id) ? current : [...current, activePuzzle.id]);
     if (supabase && authUser) {
@@ -759,8 +788,6 @@ export default function WavefrontApp() {
     if (solvedIds.includes(activePuzzle.id)) return;
     const points = wrongOnceIds.includes(activePuzzle.id) ? 0 : Math.max(40, 100 - revealedHints * 15);
     setSolvedIds((current) => [...current, activePuzzle.id]);
-    setSolvePoints((current) => ({ ...current, [activePuzzle.id]: points }));
-    setMastery((current) => ({ ...current, [activePuzzle.category]: Math.min(100, (current[activePuzzle.category] ?? 0) + points) }));
     if (supabase && authUser) {
       // Scoring is no longer decided here -- record_puzzle_solve (see
       // docs/supabase-solve-validation.sql) independently re-checks the
@@ -869,6 +896,13 @@ export default function WavefrontApp() {
     const { error } = await supabase.from("puzzle_community_posts").delete().eq("id", id);
     if (error) { console.error("delete community post failed", error); return; }
     setPosts((current) => current.filter((post) => post.id !== id));
+  };
+
+  const setCommunityPostStatus = async (id: string, status: "published" | "rejected") => {
+    if (!supabase) return;
+    const { error } = await supabase.from("puzzle_community_posts").update({ status }).eq("id", id);
+    if (error) { console.error("community post status update failed", error); return; }
+    setPosts((current) => current.map((post) => (post.id === id ? { ...post, status } : post)));
   };
 
   const toggleThread = (postId: string) => {
@@ -1185,11 +1219,11 @@ export default function WavefrontApp() {
           <button
             className="subscribe-button"
             onClick={() => setShowSubscribe(true)}
-            title={accessUntil && new Date(accessUntil).getTime() > Date.now() ? `Full access until ${new Date(accessUntil).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}` : undefined}
+            title={accessUntil && new Date(accessUntil).getTime() > now ? `Full access until ${new Date(accessUntil).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}` : undefined}
           >
             {isAdmin
               ? "Admin access"
-              : accessUntil && new Date(accessUntil).getTime() > Date.now()
+              : accessUntil && new Date(accessUntil).getTime() > now
                 ? `Active till ${new Date(accessUntil).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
                 : "Get full access"}
           </button>
@@ -1263,7 +1297,7 @@ export default function WavefrontApp() {
                     <span className="result-label">{selectedOption === activePuzzle.correctOption ? "Strong solve" : "Useful miss"}</span>
                     <h2>{selectedOption === activePuzzle.correctOption ? "You found the right path." : `The answer is ${activePuzzle.options[activePuzzle.correctOption]}.`}</h2>
                     {selectedOption === activePuzzle.correctOption && wrongOnceIds.includes(activePuzzle.id) && (
-                      <p className="redemption-notice">Marked solved, but worth 0 points -- you saw the answer here before, so this attempt doesn't count toward your score.</p>
+                      <p className="redemption-notice">Marked solved, but worth 0 points -- you saw the answer here before, so this attempt doesn&apos;t count toward your score.</p>
                     )}
                     <p>{activePuzzle.explanation}</p>
                     {progressSyncNotice && <small className="daily-notice">{progressSyncNotice}</small>}
@@ -1392,6 +1426,11 @@ export default function WavefrontApp() {
                     <div className="path-row-title">
                       <span>Path {String(categoryIndex + 1).padStart(2, "0")}</span><h2>{category.name}</h2>
                       <div className="path-progress"><span style={{ width: `${mastery[category.name]}%` }} /></div><small>{mastery[category.name]}% mastery</small>
+                      {!hasActivePass && authUser && (
+                        <small className="trial-remaining">
+                          {Math.max(0, FREE_TRIAL_SOLVES_PER_CATEGORY - (freeTrialUsedByCategory[category.name] ?? 0))} free {Math.max(0, FREE_TRIAL_SOLVES_PER_CATEGORY - (freeTrialUsedByCategory[category.name] ?? 0)) === 1 ? "question" : "questions"} left here
+                        </small>
+                      )}
                     </div>
                     <div className="path-puzzles">
                       {categoryPuzzles.map((puzzle, index) => {
@@ -1589,7 +1628,7 @@ export default function WavefrontApp() {
                     </div>
                     <div className="path-puzzles">
                       {cycle.puzzles.map((puzzle, index) => (
-                        <button type="button" key={puzzle.id} onClick={() => startPuzzle(puzzle as unknown as Puzzle, `Archived · Cycle ${cycle.cycleNumber} · Challenge ${String(index + 1).padStart(2, "0")}`)}>
+                        <button type="button" key={puzzle.id} onClick={() => startPuzzle(puzzle, `Archived · Cycle ${cycle.cycleNumber} · Challenge ${String(index + 1).padStart(2, "0")}`)}>
                           <span className="puzzle-dot">{index + 1}</span>
                           <span><strong>{puzzle.title}</strong><small>{puzzle.category} · {difficultyLabel(puzzle.difficulty)} · {puzzle.time} min</small></span><span aria-hidden="true">→</span>
                         </button>
@@ -1644,7 +1683,7 @@ export default function WavefrontApp() {
               </button>
               <button className="submit-choice-card alt" onClick={() => setShowCycleSubmitForm(true)}>
                 <span className="submit-choice-icon" aria-hidden="true">🎯</span>
-                <span className="submit-choice-copy"><strong>Propose for next cycle</strong><small>Private, admin-only review. Never shown in the feed — if it's good, it could join a future 90-puzzle roster.</small></span>
+                <span className="submit-choice-copy"><strong>Propose for next cycle</strong><small>Private, admin-only review. Never shown in the feed — if it&apos;s good, it could join a future 90-puzzle roster.</small></span>
                 <span className="submit-choice-arrow" aria-hidden="true">→</span>
               </button>
             </div>
@@ -1698,7 +1737,13 @@ export default function WavefrontApp() {
                       )}
                     </div>
                     <div className="forum-metrics"><strong>{post.rating ?? "—"}</strong><span>rating</span><strong>{post.replies}</strong><span>replies</span></div>
-                    {isAdmin && <button className="forum-delete" aria-label="Delete post" onClick={() => void deleteCommunityPost(post.id)}>🗑</button>}
+                    {isAdmin && (
+                      <div className="admin-toolbar">
+                        {post.status !== "published" && <button className="text-action" onClick={() => void setCommunityPostStatus(post.id, "published")}>Publish</button>}
+                        {post.status !== "rejected" && <button className="text-action" onClick={() => void setCommunityPostStatus(post.id, "rejected")}>Reject</button>}
+                        <button className="forum-delete" aria-label="Delete post" onClick={() => void deleteCommunityPost(post.id)}>🗑</button>
+                      </div>
+                    )}
                   </article>
                 ))}
               </div>
@@ -1739,7 +1784,7 @@ export default function WavefrontApp() {
           <section className="subscribe-modal" role="dialog" aria-modal="true" aria-labelledby="subscribe-title" onMouseDown={(event) => event.stopPropagation()}>
             <button className="modal-close" aria-label="Close" onClick={() => setShowSubscribe(false)}>×</button>
             <AppMark /><span className="eyebrow">Wavefront Pass</span><h2 id="subscribe-title">Keep your mind in motion.</h2>
-            {accessUntil && new Date(accessUntil).getTime() > Date.now() ? <><div className="access-active"><strong>Your pass is active.</strong><span>Full access until {new Date(accessUntil).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</span></div><div className="membership-lines"><span>All adaptive paths</span><span>Fortnightly puzzle drops</span><span>Community rankings</span></div><small>One-time payment · No automatic renewal</small></> : <><div className="pass-options">{(Object.keys(accessPasses) as AccessPass[]).map((pass) => <button key={pass} className={`pass-option ${selectedPass === pass ? "selected" : ""}`} onClick={() => { setSelectedPass(pass); setCheckoutNotice(""); }}><strong>{accessPasses[pass].name}</strong><b>{accessPasses[pass].price}</b><span>{accessPasses[pass].description}</span></button>)}</div><div className="membership-lines"><span>All adaptive paths</span><span>Fortnightly puzzle drops</span><span>Community rankings</span></div><button className="checkout-button" onClick={() => void beginCheckout()} disabled={checkoutLoading}>{checkoutLoading ? "Opening secure checkout..." : `Get ${accessPasses[selectedPass].duration} access`} <span aria-hidden="true">→</span></button>{checkoutNotice && <p className="checkout-notice">{checkoutNotice}</p>}<small>One-time payment · No automatic renewal</small></>}
+            {accessUntil && new Date(accessUntil).getTime() > now ? <><div className="access-active"><strong>Your pass is active.</strong><span>Full access until {new Date(accessUntil).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</span></div><div className="membership-lines"><span>All adaptive paths</span><span>Fortnightly puzzle drops</span><span>Community rankings</span></div><small>One-time payment · No automatic renewal</small></> : <><div className="pass-options">{(Object.keys(accessPasses) as AccessPass[]).map((pass) => <button key={pass} className={`pass-option ${selectedPass === pass ? "selected" : ""}`} onClick={() => { setSelectedPass(pass); setCheckoutNotice(""); }}><strong>{accessPasses[pass].name}</strong><b>{accessPasses[pass].price}</b><span>{accessPasses[pass].description}</span></button>)}</div><div className="membership-lines"><span>All adaptive paths</span><span>Fortnightly puzzle drops</span><span>Community rankings</span></div><button className="checkout-button" onClick={() => void beginCheckout()} disabled={checkoutLoading}>{checkoutLoading ? "Opening secure checkout..." : `Get ${accessPasses[selectedPass].duration} access`} <span aria-hidden="true">→</span></button>{checkoutNotice && <p className="checkout-notice">{checkoutNotice}</p>}<small>One-time payment · No automatic renewal</small></>}
           </section>
         </div>
       )}
