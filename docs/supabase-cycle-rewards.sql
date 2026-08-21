@@ -116,10 +116,15 @@ alter table public.puzzle_reward_grants enable row level security;
 -- Read access is fine (a solver seeing their own streak/rank is not
 -- sensitive), writes only ever happen inside the SECURITY DEFINER
 -- functions below, which run with elevated privilege regardless of RLS.
+drop policy if exists "cycle history is publicly readable" on public.puzzle_cycles;
 create policy "cycle history is publicly readable" on public.puzzle_cycles for select using (true);
+drop policy if exists "cycle puzzle membership is publicly readable" on public.puzzle_cycle_puzzles;
 create policy "cycle puzzle membership is publicly readable" on public.puzzle_cycle_puzzles for select using (true);
+drop policy if exists "cycle rankings are publicly readable" on public.puzzle_cycle_rankings;
 create policy "cycle rankings are publicly readable" on public.puzzle_cycle_rankings for select using (true);
+drop policy if exists "reward streaks are publicly readable" on public.puzzle_reward_streaks;
 create policy "reward streaks are publicly readable" on public.puzzle_reward_streaks for select using (true);
+drop policy if exists "reward grants are publicly readable" on public.puzzle_reward_grants;
 create policy "reward grants are publicly readable" on public.puzzle_reward_grants for select using (true);
 
 -- ============================================================
