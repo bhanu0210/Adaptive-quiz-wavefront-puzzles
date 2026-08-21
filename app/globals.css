@@ -1937,6 +1937,24 @@ select:focus-visible {
   color: var(--ink);
 }
 
+.hint-explainer {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.hall-of-fame {
+  margin-top: 36px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line-strong);
+}
+
+.hall-of-fame-table {
+  margin-top: 12px;
+  border-top: 1px solid var(--line-strong);
+}
+
 .modal-backdrop {
   position: fixed;
   z-index: 100;
