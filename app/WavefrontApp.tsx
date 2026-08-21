@@ -764,13 +764,20 @@ export default function WavefrontApp() {
     if (supabase && authUser) {
       // Restored: an earlier change stopped writing to puzzle_progress on
       // the assumption nothing read it anymore, based only on grepping this
-      // repo's frontend code. That assumption was wrong -- the live
-      // puzzle_leaderboard Supabase function (defined outside this repo,
-      // never visible from here) most likely reads from puzzle_progress,
-      // and removing the write broke real users' leaderboard scores/ranks
-      // even though locking (which reads puzzle_solve_scores) kept working.
-      // Write to both again until puzzle_leaderboard's actual source can be
-      // confirmed.
+      // repo's frontend code. That assumption was wrong -- something
+      // server-side (undocumented, defined outside this repo) depended on
+      // it and removing the write broke real users' leaderboard scores/
+      // ranks even though locking (which reads puzzle_solve_scores) kept
+      // working.
+      //
+      // As of docs/supabase-leaderboard-cycle-scope.sql, puzzle_leaderboard()
+      // itself is now known to read only from puzzle_solve_scores and
+      // puzzle_daily_points -- NOT puzzle_progress -- so that specific
+      // function is no longer the reason to keep this write. But since
+      // something else server-side still might depend on puzzle_progress
+      // and no session has Supabase credentials to check, keep writing to
+      // both until that's confirmed rather than risk repeating the same
+      // regression.
       const asResult = (promise: PromiseLike<{ error: { message?: string; code?: string } | null }>) =>
         Promise.resolve(promise).catch((thrown): { error: { message?: string; code?: string } } => ({
           error: { message: thrown instanceof Error ? thrown.message : String(thrown) },
