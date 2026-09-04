@@ -16,7 +16,7 @@ type Puzzle = (typeof launchPuzzles)[number];
 // archived puzzle IS a live Puzzle via an unchecked cast, which would happily
 // compile even if the two shapes ever drifted apart.
 type SolvablePuzzle = Puzzle | ArchivedPuzzle;
-type View = "solve" | "daily" | "paths" | "tips" | "leaderboard" | "community" | "archive" | "feedback" | "admin";
+type View = "solve" | "daily" | "paths" | "tips" | "leaderboard" | "community" | "guide" | "archive" | "feedback" | "admin";
 type AccessPass = "monthly" | "annual";
 type DailyBrief = {
   date: string | null;
@@ -852,8 +852,9 @@ export default function WavefrontApp() {
     { id: "tips", label: "Tips", glyph: "05" },
     { id: "leaderboard", label: "Leaderboard", glyph: "06" },
     { id: "community", label: "Community", glyph: "07" },
-    { id: "archive", label: "Archive", glyph: "08" },
-    ...(isAdmin ? [{ id: "admin" as View, label: "Admin", glyph: "09" }] : []),
+    { id: "guide", label: "Guide", glyph: "08" },
+    { id: "archive", label: "Archive", glyph: "09" },
+    ...(isAdmin ? [{ id: "admin" as View, label: "Admin", glyph: "10" }] : []),
   ];
 
   const changeView = (next: View) => {
@@ -1679,7 +1680,8 @@ export default function WavefrontApp() {
               </div>
             )}
           </section>
-        ) : !authUser ? (
+        ) : view === "community" ? (
+          !authUser ? (
           <section className="standard-view">
             <div className="page-heading"><span className="eyebrow">Solver forum</span><h1>Community</h1><p>Debate methods, rate challenges, and submit original puzzles.</p></div>
             <div className="forum-feed">
@@ -1796,7 +1798,101 @@ export default function WavefrontApp() {
               </aside>
             </div>
           </section>
-        )}
+          )
+        ) : view === "guide" ? (
+          <section className="standard-view guide-view">
+            <div className="page-heading"><span className="eyebrow">Read this once</span><h1>Guide</h1><p>Where everything lives, how scoring and rewards actually work, what&apos;s free versus paid, and the policies behind the site.</p></div>
+
+            <details className="rules-disclosure" open>
+              <summary>Where to find what</summary>
+              <div className="rules-disclosure-body">
+                <div><span>Solve</span><p>The main adaptive loop. Recommends one puzzle at a time, picked for whichever of the 6 paths you&apos;re furthest behind in.</p></div>
+                <div><span>Daily</span><p>Three fixed prompts (easy, moderate, tough) that reset every day. Free to read; checking an answer for points needs an active pass.</p></div>
+                <div><span>Paths</span><p>Browse and pick any puzzle yourself instead of following the adaptive recommendation, filtered by category.</p></div>
+                <div><span>Tips</span><p>A library of short, reusable techniques (subscriber-only), plus a free &quot;worked examples&quot; warm-up grid.</p></div>
+                <div><span>Leaderboard</span><p>Live scores for the current puzzle cycle, plus a permanent Hall of Fame for every past top-10 finish.</p></div>
+                <div><span>Community</span><p>Debate methods, rate challenges, and submit puzzles for the public forum or for review into a future 90-puzzle roster.</p></div>
+                <div><span>Archive</span><p>Every retired puzzle roster, still fully solvable, once a fresh set of 90 replaces it every two weeks.</p></div>
+                <div><span>Feedback</span><p>The direct line to the editor — flag an unclear question, a possible solution issue, or a site suggestion.</p></div>
+              </div>
+            </details>
+
+            <details className="rules-disclosure">
+              <summary>How adaptive difficulty works</summary>
+              <div className="rules-disclosure-body">
+                <div><span>One level per path</span><p>You have an independent difficulty level (1–5) in each of the 6 categories, not one overall level. The app always recommends a puzzle from whichever category is currently your lowest, so you build breadth across all six before any one path races ahead.</p></div>
+                <div><span>What moves your level</span><p>A clean correct answer (no hints) advances that category&apos;s level by one. A wrong answer drops it by one. A correct answer where you used a hint holds your level steady — it doesn&apos;t advance you, but it also never demotes you, since you did genuinely solve it.</p></div>
+                <div><span>Difficulty can be recalibrated by real solvers</span><p>A puzzle&apos;s difficulty label never changes, but once enough solvers have rated how hard it actually played, the recommendation engine quietly uses that real-world rating instead of the original guess when picking your next puzzle — so the picker gets more accurate over time without changing what you see on the puzzle itself.</p></div>
+              </div>
+            </details>
+
+            <details className="rules-disclosure">
+              <summary>Scoring &amp; hints</summary>
+              <div className="rules-disclosure-body">
+                <div><span>Solve points</span><p>A correct solve is worth 100 points, minus 15 for every hint you reveal on that puzzle, floored at 40. So: 100 with no hints, 85 / 70 / 55 with one, two, or three hints.</p></div>
+                <div><span>Once wrong, always zero</span><p>If you&apos;ve ever answered a puzzle incorrectly, a later correct answer on it scores 0 — the explanation was already shown, so re-answering is recall, not solving.</p></div>
+                <div><span>Daily points</span><p>The three Daily prompts award 20 (easy), 50 (moderate), and 100 (tough) points, each earnable once per day, on a correct subscriber solve.</p></div>
+                <div><span>Every answer is independently verified</span><p>Every puzzle&apos;s correct answer is recomputed and checked before it ships — not just copied from wherever the puzzle originated.</p></div>
+              </div>
+            </details>
+
+            <details className="rules-disclosure">
+              <summary>Leaderboard, cycles &amp; rewards</summary>
+              <div className="rules-disclosure-body">
+                <div><span>Scoped to the current cycle</span><p>The live leaderboard shows scores from the current 90-puzzle roster only — when a new cycle goes live, real-solver scores start over. A fixed set of ~20 seeded reference names always appear on the board too, alongside real solvers, as permanent comparison points.</p></div>
+                <div><span>Hall of Fame</span><p>Separately, anyone who ever finishes a closed cycle ranked in the top 10 is recorded permanently — this list never resets, even though the live board does.</p></div>
+                <div><span>Weekly reward</span><p>When a cycle closes, the top 10 solvers who hold an active pass at that moment each get +7 days of access, stacked on whatever they already have. Ranking well without a pass earns the leaderboard spot, not the extra days.</p></div>
+                <div><span>Long-streak bonus</span><p>Top 10 for 6 cycles in a row while subscribed each time earns +1 year of access. Missing the top 10, or letting your pass lapse for a cycle, resets the streak — the next bonus then needs 12 in a row, then 18, and so on.</p></div>
+              </div>
+            </details>
+
+            <details className="rules-disclosure">
+              <summary>Pricing &amp; access</summary>
+              <div className="rules-disclosure-body">
+                <div><span>Try before you pay</span><p>Without an account: the easiest and toughest question in every path, free, no sign-in. With a free account: {FREE_TRIAL_SOLVES_PER_CATEGORY} adaptive-picked questions per path, on top of that.</p></div>
+                <div><span>{accessPasses.monthly.name}</span><p>{accessPasses.monthly.price} for {accessPasses.monthly.duration} of full access — every adaptive path, the fortnightly puzzle drops, the tips library, and full community access.</p></div>
+                <div><span>{accessPasses.annual.name}</span><p>{accessPasses.annual.price} for {accessPasses.annual.duration} — the better per-day rate if you expect to stick around.</p></div>
+                <div><span>One-time payment</span><p>Both passes are a single charge for a fixed period, handled through Razorpay. There is no subscription and nothing renews automatically — access simply ends on the date shown, and you choose whether to buy another pass.</p></div>
+              </div>
+            </details>
+
+            <details className="rules-disclosure">
+              <summary>Community guidelines</summary>
+              <div className="rules-disclosure-body">
+                <div><span>Two ways to submit</span><p>A public forum post is visible to everyone and open to replies and ratings. A cycle proposal is private and admin-reviewed only — it never appears in the feed, but a strong one could join a future 90-puzzle roster.</p></div>
+                <div><span>Quality gate</span><p>A submitted puzzle needs a full answer and reasoning, independent solver agreement, and editor verification before it&apos;s ranked — the same bar the main roster holds itself to.</p></div>
+                <div><span>Moderation</span><p>Posts can be published, held for review, or rejected, and any post or reply may be removed if it breaks these guidelines. Reading beyond the first couple of posts, and posting your own, requires an active pass.</p></div>
+              </div>
+            </details>
+
+            <details className="rules-disclosure">
+              <summary>Privacy &amp; your data</summary>
+              <div className="rules-disclosure-body">
+                <div><span>What we store</span><p>Your email (for sign-in), your solve and hint history, your adaptive level per path, streaks, any community posts/replies/ratings you make, and any feedback you submit. That&apos;s it — no more than what&apos;s needed to run the adaptive picker, the leaderboard, and your streak.</p></div>
+                <div><span>What we don&apos;t do</span><p>We don&apos;t sell your data, and we don&apos;t share it with anyone outside of running the site itself.</p></div>
+                <div><span>Payments</span><p>Checkout is handled entirely by Razorpay — this site never sees or stores your card or payment details.</p></div>
+                <div><span>Questions or a deletion request</span><p>Reach out via Feedback and we&apos;ll handle it directly.</p></div>
+              </div>
+            </details>
+
+            <details className="rules-disclosure">
+              <summary>Fair use</summary>
+              <div className="rules-disclosure-body">
+                <div><span>One account per person</span><p>Adaptive levels, streaks, and rewards are tied to a single account — sharing an account defeats the point of an adaptive difficulty curve built around you specifically.</p></div>
+                <div><span>No automated solving</span><p>Scores are only ever recorded through a real, signed-in solve. Scripted or automated activity is detected and throttled automatically.</p></div>
+                <div><span>Content is original or adapted</span><p>Puzzles drawn from outside sources are rewritten in this site&apos;s own words with an independently verified answer, never republished verbatim.</p></div>
+              </div>
+            </details>
+
+            <details className="rules-disclosure">
+              <summary>Payments, refunds &amp; support</summary>
+              <div className="rules-disclosure-body">
+                <div><span>Charged in error, or access not working</span><p>Contact us through the Feedback tab with what happened and we&apos;ll look into it directly — there&apos;s no automated refund flow, every case is handled personally.</p></div>
+                <div><span>Everything else</span><p>Unclear questions, a possible wrong answer, difficulty feedback, or a general site suggestion all go through the same Feedback tab — it&apos;s also available right after every solved puzzle.</p></div>
+              </div>
+            </details>
+          </section>
+        ) : null}
       </main>
 
       <nav className="mobile-nav" aria-label="Mobile primary">
