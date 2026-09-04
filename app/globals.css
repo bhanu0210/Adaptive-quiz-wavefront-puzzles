@@ -232,6 +232,24 @@ select:focus-visible {
   box-shadow: 0 0 0 4px rgba(243, 185, 23, 0.24);
 }
 
+.guide-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--blue);
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.guide-button:hover {
+  background: var(--blue-soft);
+  border-color: var(--blue);
+}
+
 .sidebar {
   position: sticky;
   top: 72px;

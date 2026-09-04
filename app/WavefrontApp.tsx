@@ -1227,6 +1227,9 @@ export default function WavefrontApp() {
           <span className="brand-copy"><strong>Wavefront</strong><small>Puzzles</small></span>
         </button>
         <div className="topbar-actions">
+          <button className="guide-button" onClick={() => changeView("guide")} title="Guide: how the site works, scoring, pricing & policies" aria-label="Open the Guide">
+            <span aria-hidden="true">?</span>
+          </button>
           <a className="daily-link" href="https://wavefrontdaily.in" target="_blank" rel="noreferrer">
             Read Wavefront Daily <span aria-hidden="true">↗</span>
           </a>
