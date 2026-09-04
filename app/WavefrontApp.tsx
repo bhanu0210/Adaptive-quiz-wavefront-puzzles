@@ -1701,8 +1701,8 @@ export default function WavefrontApp() {
             </div>
             <div className="tips-locked">
               <h2>{posts.length > 2 ? `That's 2 of ${posts.length} posts.` : "Sign in to join the conversation."}</h2>
-              <p>Sign in free to read the full feed and reply. Subscribe for a pass to submit your own puzzles and propose them for the next cycle.</p>
-              <button className="checkout-button" onClick={() => { setAuthMessage("Sign in to read the full community feed."); setShowAuth(true); }}>Sign in <span aria-hidden="true">→</span></button>
+              <p>Reading the full feed, replying, and submitting your own puzzles all need an active pass. Sign in first, then get a pass to unlock it.</p>
+              <button className="checkout-button" onClick={() => { setAuthMessage("Sign in, then get a pass to unlock the full community feed."); setShowAuth(true); }}>Sign in <span aria-hidden="true">→</span></button>
             </div>
           </section>
         ) : !hasActivePass ? (
