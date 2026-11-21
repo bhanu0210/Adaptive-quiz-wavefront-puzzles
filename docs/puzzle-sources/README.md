@@ -4,6 +4,8 @@ Durable knowledge base for Wavefront Puzzles' recurring content cycle. These fil
 
 **Start here**: `../PUZZLE-ROTATION.md` is the actual operating playbook for the every-14-days rotation. This directory is its reference library.
 
+**Authoring craft**: `../../.claude/skills/puzzle-creation/SKILL.md` is the puzzle-creation skill (difficulty calibration, web-research protocol, uniqueness transforms, hint ladder, verification gate, worked example). Claude Code loads it automatically as the `puzzle-creation` skill.
+
 - `01-puzzle-study-guide.md` — taxonomy of puzzle families by difficulty tier and cognitive mechanic, plus quick-reference sheets (mutual vs. common knowledge, CDT/EDT/FDT decision theory, the Embedded Question Lemma).
 - `02-epistemic-precursor-and-decision-theory-puzzles.md` — Three Logicians, Boolos' precursor puzzles, Gerbrandy's boxes, Freudenthal Sum & Product, the Provence 2010 variant, Denise's Revenge, Ant-Honey, the n-gods generalization, Bernard-starts Cheryl, Cheating Husbands, Tuesday Boy, Sleeping Beauty, Twin Prisoner's Dilemma, Counterfactual Mugging.
 - `03-core-anthology-and-folk-riddles.md` — the Hardest Logic Puzzle Ever (and its variants), Blue-Eyed Islanders, classic Cheryl's Birthday, Newcomb's Paradox, the Unexpected Hanging Paradox, Monty Hall, folk riddles (Sphinx, Belmont Caskets, Harvard Riddle, Prisoner's Lie/Truth), the full Einstein Zebra clue set, GCHQ ciphers, and the explicit **out-of-scope list**.
